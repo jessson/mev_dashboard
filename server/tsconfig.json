@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@/entities/*": ["entities/*"],
+      "@/services/*": ["services/*"],
+      "@/routes/*": ["routes/*"],
+      "@/utils/*": ["utils/*"],
+      "@/types/*": ["types/*"]
+    }
+  },
+  "include": ["src/**/*", "scripts/test-profit.ts"],
+  "exclude": ["node_modules", "dist", "scripts", "**/*.test.ts"],
+  "ts-node": {
+    "experimentalSpecifierResolution": "node"
+  }
+}

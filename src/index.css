@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 防止浏览器插件冲突 */
+.app-container {
+  position: relative;
+  z-index: 1;
+  background: white;
+}
+
+/* 自定义样式 */
+.transaction-table .ant-table-tbody > tr:hover > td {
+  background-color: #f0f9ff !important;
+}
+
+.transaction-table .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.transaction-table .ant-table-tbody > tr > td {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* WebSocket连接状态指示器 */
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.connection-indicator.connected {
+  color: #52c41a;
+  background-color: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.connection-indicator.disconnected {
+  color: #ff4d4f;
+  background-color: #fff2f0;
+  border: 1px solid #ffccc7;
+}
+
+/* 统计卡片样式 */
+.ant-statistic-content-value {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* 侧边栏样式 */
+.ant-layout-sider {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .ant-layout-header {
+    padding: 0 16px;
+    height: 56px;
+    line-height: 56px;
+  }
+  
+  .ant-layout-content {
+    padding: 12px;
+  }
+  
+  .ant-card-body {
+    padding: 12px;
+  }
+  
+  .ant-statistic-title {
+    font-size: 12px;
+  }
+  
+  .ant-statistic-content {
+    font-size: 14px;
+  }
+  
+  /* 移动端表格隐藏 */
+  .ant-table-wrapper {
+    display: none;
+  }
+  
+  /* 移动端卡片样式 */
+  .mobile-trade-card {
+    margin-bottom: 8px;
+  }
+  
+  .mobile-trade-card .ant-card-body {
+    padding: 8px;
+  }
+}
+
+/* 桌面端隐藏移动端组件 */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+}
+
+/* 移动端隐藏桌面端组件 */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+}
+
+/* 防止插件样式冲突 */
+* {
+  box-sizing: border-box;
+}
+
+/* 确保应用样式优先级 */
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+/* WebSocket错误提示样式 */
+.websocket-error {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 加载动画优化 */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 连接状态动画 */
+.connection-indicator.connected::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #52c41a, #73d13d);
+  border-radius: 6px;
+  z-index: -1;
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0.8;
+  }
+}
