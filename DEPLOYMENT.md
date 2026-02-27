@@ -6,7 +6,7 @@
 
 ```bash
 # 首次部署（安装依赖 + 构建 + 发布前端 + 启动后端 + 健康检查）
-# 默认 443 端口，默认启用 TLS
+# 默认 8443 端口，默认启用 TLS
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
 ./scripts/deploy.sh
@@ -48,7 +48,7 @@ SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
 ```bash
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-SERVER_PORT=443 \
+SERVER_PORT=8443 \
 ./scripts/deploy.sh
 ```
 
@@ -82,6 +82,7 @@ node scripts/gateway.mjs
 说明：
 - 前端构建时设置 `VITE_API_SAME_ORIGIN=1`，让前端请求走同源 `/api`（由网关转发到 3000）。
 - 访问地址将是 `https://your-domain.com:8443`（Cloudflare 需允许并代理该端口）。
+- 防火墙可用 `scripts/firewall-ufw.sh` 将 `3000` 限制为本机 + 固定 IP allowlist。
 
 ### 3. Cloudflare 模式
 在 Cloudflare 中将 SSL 模式设置为 `Full (strict)`。
