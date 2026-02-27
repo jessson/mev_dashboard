@@ -4,6 +4,12 @@ const getApiBaseUrl = (): string => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
+
+  // 可选：使用同源（适用于“前端端口 + API:3000，但由网关反代 /api 的场景”）
+  const sameOriginFlag = String(import.meta.env.VITE_API_SAME_ORIGIN ?? '').toLowerCase();
+  if (sameOriginFlag === '1' || sameOriginFlag === 'true') {
+    return window.location.origin;
+  }
   
   // 开发环境
   if (import.meta.env.DEV) {

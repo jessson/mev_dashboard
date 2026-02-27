@@ -52,6 +52,37 @@ SERVER_PORT=443 \
 ./scripts/deploy.sh
 ```
 
+## 不使用 Nginx（Node 直出 Web 端口 + API:3000）
+
+如果你不想用 Nginx 反向代理，又希望：
+- Web 端口（例如 `8443`）走 HTTPS（Cloudflare Origin Cert）
+- API 仍然在 `3000`（内部监听）
+
+可以使用项目自带的 Node 网关 `scripts/gateway.mjs`：
+
+1) 启动后端 API（3000）
+```bash
+cd server
+npm run build
+PORT=3000 HOST=127.0.0.1 NODE_ENV=production node dist/index.js
+```
+
+2) 构建前端，并用网关监听 8443（托管 `dist` + 反代 `/api/*` 和 `/socket.io/*` 到 3000）
+```bash
+cd ..
+VITE_API_SAME_ORIGIN=1 npm run build
+
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+WEB_PORT=8443 \
+API_TARGET=http://127.0.0.1:3000 \
+node scripts/gateway.mjs
+```
+
+说明：
+- 前端构建时设置 `VITE_API_SAME_ORIGIN=1`，让前端请求走同源 `/api`（由网关转发到 3000）。
+- 访问地址将是 `https://your-domain.com:8443`（Cloudflare 需允许并代理该端口）。
+
 ### 3. Cloudflare 模式
 在 Cloudflare 中将 SSL 模式设置为 `Full (strict)`。
 

@@ -103,6 +103,10 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onLogin }) => {
       if (import.meta.env.VITE_API_BASE_URL) {
         return import.meta.env.VITE_API_BASE_URL;
       }
+      const sameOriginFlag = String(import.meta.env.VITE_API_SAME_ORIGIN ?? '').toLowerCase();
+      if (sameOriginFlag === '1' || sameOriginFlag === 'true') {
+        return window.location.origin;
+      }
       if (import.meta.env.DEV) {
         return 'http://localhost:3000';
       }
