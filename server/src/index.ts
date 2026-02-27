@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import Fastify from 'fastify';
+import type { FastifyServerOptions } from 'fastify';
 import { TypeormConnection } from './config/database';
 import { registerPlugins } from './config/plugins';
 import { registerRoutes } from './config/routes';
@@ -19,7 +20,8 @@ const sslCertPath = process.env.SSL_CERT_PATH;
 const sslKeyPath = process.env.SSL_KEY_PATH;
 const httpsEnabled = process.env.ENABLE_HTTPS === '1' || Boolean(sslCertPath && sslKeyPath);
 
-const fastifyOptions: any = {
+const fastifyOptions: FastifyServerOptions = {
+  http2: false,
   logger: {
     level: process.env.LOG_LEVEL || 'info',
     transport: process.env.NODE_ENV === 'development' ? {
@@ -30,7 +32,7 @@ const fastifyOptions: any = {
         ignore: 'pid,hostname'
       }
     } : undefined
-  }
+  } as any
 };
 
 if (httpsEnabled) {

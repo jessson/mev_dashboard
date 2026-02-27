@@ -152,7 +152,7 @@ VITE_API_BASE_URL=https://your-domain.com/api
 
 ### 场景1：前后端同服务器不同端口
 
-- 前端：`http://your-server:80` 或 `https://your-server:443`
+- 前端：`http://your-server:80` 或 `https://your-server:8443`
 - 后端：`http://your-server:3000`
 
 配置：
