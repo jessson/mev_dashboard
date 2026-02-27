@@ -1,5 +1,65 @@
 # 部署配置说明
 
+## 一键部署（推荐）
+
+项目根目录新增脚本：`scripts/deploy.sh`
+
+```bash
+# 首次部署（安装依赖 + 构建 + 发布前端 + 启动后端 + 健康检查）
+# 默认 443 端口，默认启用 TLS
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+./scripts/deploy.sh
+
+# 跳过依赖安装
+SKIP_INSTALL=1 ./scripts/deploy.sh
+
+# 自定义前端静态目录
+FRONTEND_DIST_DIR=/var/www/your_site ./scripts/deploy.sh
+
+# Cloudflare Origin Certificate 常见健康检查（证书非公网 CA，默认用 -k）
+HEALTH_HOST=127.0.0.1 \
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+./scripts/deploy.sh
+```
+
+脚本行为：
+1. 安装前后端依赖（默认）
+2. 构建前端与后端
+3. 将前端 `dist` 发布到 `FRONTEND_DIST_DIR`（默认 `/var/www/mev_dashboard`）
+4. 使用 PM2 重载/启动后端（若本机安装了 PM2）
+5. 自动执行健康检查
+
+## Cloudflare SSL 证书
+
+如果你要使用 Cloudflare SSL，请使用 **Cloudflare Origin Certificate**（不是 Edge 证书）。
+
+### 1. 生成 Origin Certificate
+1. 登录 Cloudflare 控制台
+2. 进入 `SSL/TLS` -> `Origin Server`
+3. 点击 `Create Certificate`
+4. 将证书和私钥保存到服务器，例如：
+   - `/etc/ssl/certs/cf-origin.pem`
+   - `/etc/ssl/private/cf-origin.key`
+
+### 2. 启动方式
+
+```bash
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+SERVER_PORT=443 \
+./scripts/deploy.sh
+```
+
+### 3. Cloudflare 模式
+在 Cloudflare 中将 SSL 模式设置为 `Full (strict)`。
+
+### 4. 后端环境变量
+- `ENABLE_HTTPS=1`（脚本会自动设置）
+- `SSL_CERT_PATH`
+- `SSL_KEY_PATH`
+
 ## API 地址配置
 
 ### 方案一：使用环境变量（推荐）

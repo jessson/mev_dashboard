@@ -15,7 +15,11 @@ import { logger } from './utils/logger';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const fastify = Fastify({
+const sslCertPath = process.env.SSL_CERT_PATH;
+const sslKeyPath = process.env.SSL_KEY_PATH;
+const httpsEnabled = process.env.ENABLE_HTTPS === '1' || Boolean(sslCertPath && sslKeyPath);
+
+const fastifyOptions: any = {
   logger: {
     level: process.env.LOG_LEVEL || 'info',
     transport: process.env.NODE_ENV === 'development' ? {
@@ -27,7 +31,26 @@ const fastify = Fastify({
       }
     } : undefined
   }
-});
+};
+
+if (httpsEnabled) {
+  if (!sslCertPath || !sslKeyPath) {
+    throw new Error('启用 HTTPS 时必须同时设置 SSL_CERT_PATH 和 SSL_KEY_PATH');
+  }
+  if (!fs.existsSync(sslCertPath)) {
+    throw new Error(`SSL_CERT_PATH 文件不存在: ${sslCertPath}`);
+  }
+  if (!fs.existsSync(sslKeyPath)) {
+    throw new Error(`SSL_KEY_PATH 文件不存在: ${sslKeyPath}`);
+  }
+
+  fastifyOptions.https = {
+    cert: fs.readFileSync(sslCertPath),
+    key: fs.readFileSync(sslKeyPath)
+  };
+}
+
+const fastify = Fastify(fastifyOptions);
 
 // 添加全局请求日志（仅在debug模式下）
 if (process.env.LOG_LEVEL === 'debug') {
@@ -134,9 +157,10 @@ async function start() {
     // 启动服务器
     const port = parseInt(process.env.PORT || '3000');
     const host = process.env.HOST || '0.0.0.0';
+    const protocol = httpsEnabled ? 'https' : 'http';
     
     await fastify.listen({ port, host });
-    logger.info(`🚀 服务器启动成功，监听端口: ${port}`);
+    logger.info(`🚀 服务器启动成功: ${protocol}://${host}:${port}`);
 
     // 定期清理WebSocket连接
     setInterval(() => {

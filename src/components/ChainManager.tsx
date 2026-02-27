@@ -1,342 +1,306 @@
-import React, { useState } from 'react';
-import { 
-  Modal, 
-  Table, 
-  Button, 
-  Switch, 
-  Tag, 
-  Space, 
-  Form, 
-  Input, 
-  ColorPicker, 
-  InputNumber,
-  message,
-  Popconfirm,
-  Card
-} from 'antd';
-import { Plus, Edit, Trash2, Settings } from 'lucide-react';
-import { useChains, ChainConfig } from '../hooks/useChains';
-import type { ColumnsType } from 'antd/es/table';
+import { useMemo, useState } from 'react';
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  ColorInput,
+  Group,
+  Modal,
+  NumberInput,
+  ScrollArea,
+  Stack,
+  Switch,
+  Table,
+  Text,
+  TextInput,
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { Edit, Plus, Trash2 } from 'lucide-react';
+import { ChainConfig, useChains } from '../hooks/useChains';
 
 interface ChainManagerProps {
   visible: boolean;
   onClose: () => void;
 }
 
+interface ChainFormState {
+  id: string;
+  name: string;
+  displayName: string;
+  symbol: string;
+  color: string;
+  txExplorerUrl: string;
+  addressExplorerUrl: string;
+  enabled: boolean;
+  order: number;
+}
+
+const defaultForm: ChainFormState = {
+  id: '',
+  name: '',
+  displayName: '',
+  symbol: '',
+  color: '#228be6',
+  txExplorerUrl: '',
+  addressExplorerUrl: '',
+  enabled: true,
+  order: 999,
+};
+
 const ChainManager: React.FC<ChainManagerProps> = ({ visible, onClose }) => {
-  const { 
-    chains, 
-    updateChainConfig, 
-    addChain, 
-    deleteChain, 
-    refetch 
-  } = useChains();
-  
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [addModalVisible, setAddModalVisible] = useState(false);
+  const { chains, updateChainConfig, addChain, deleteChain } = useChains();
+
+  const [formOpened, setFormOpened] = useState(false);
   const [editingChain, setEditingChain] = useState<ChainConfig | null>(null);
-  const [form] = Form.useForm();
+  const [formState, setFormState] = useState<ChainFormState>(defaultForm);
+
+  const sortedChains = useMemo(() => [...chains].sort((a, b) => a.order - b.order), [chains]);
+
+  const resetForm = () => {
+    setFormState(defaultForm);
+    setEditingChain(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setFormOpened(true);
+  };
+
+  const openEditModal = (chain: ChainConfig) => {
+    setEditingChain(chain);
+    setFormState({
+      id: chain.id,
+      name: chain.name,
+      displayName: chain.displayName,
+      symbol: chain.symbol,
+      color: chain.color,
+      txExplorerUrl: chain.explorerUrl.tx,
+      addressExplorerUrl: chain.explorerUrl.address,
+      enabled: chain.enabled,
+      order: chain.order,
+    });
+    setFormOpened(true);
+  };
 
   const handleToggleEnabled = async (chainId: string, enabled: boolean) => {
     const success = await updateChainConfig(chainId, { enabled });
-    if (success) {
-      message.success(`链 ${chainId} 已${enabled ? '启用' : '禁用'}`);
-    } else {
-      message.error('操作失败');
-    }
-  };
-
-  const handleEdit = (chain: ChainConfig) => {
-    setEditingChain(chain);
-    form.setFieldsValue({
-      ...chain,
-      color: chain.color,
-      txExplorerUrl: chain.explorerUrl.tx,
-      addressExplorerUrl: chain.explorerUrl.address
+    notifications.show({
+      title: success ? '链状态已更新' : '操作失败',
+      message: success ? `链 ${chainId} 已${enabled ? '启用' : '禁用'}` : '请稍后重试',
+      color: success ? 'green' : 'red',
     });
-    setEditModalVisible(true);
   };
 
-  const handleAdd = () => {
-    form.resetFields();
-    setEditingChain(null);
-    setAddModalVisible(true);
-  };
+  const handleSave = async () => {
+    if (!formState.id || !formState.name || !formState.displayName || !formState.symbol) {
+      notifications.show({ title: '参数错误', message: '请填写必填字段', color: 'yellow' });
+      return;
+    }
 
-  const handleSave = async (values: any) => {
     const chainData: ChainConfig = {
-      id: values.id,
-      name: values.name,
-      displayName: values.displayName,
-      symbol: values.symbol,
-      color: typeof values.color === 'string' ? values.color : values.color.toHexString(),
+      id: formState.id,
+      name: formState.name,
+      displayName: formState.displayName,
+      symbol: formState.symbol,
+      color: formState.color,
       explorerUrl: {
-        tx: values.txExplorerUrl,
-        address: values.addressExplorerUrl
+        tx: formState.txExplorerUrl,
+        address: formState.addressExplorerUrl,
       },
-      enabled: values.enabled ?? true,
-      order: values.order ?? 999
+      enabled: formState.enabled,
+      order: formState.order,
     };
 
-    let success = false;
-    if (editingChain) {
-      success = await updateChainConfig(editingChain.id, chainData);
-    } else {
-      success = await addChain(chainData);
-    }
+    const success = editingChain
+      ? await updateChainConfig(editingChain.id, chainData)
+      : await addChain(chainData);
 
     if (success) {
-      message.success(editingChain ? '链配置已更新' : '链已添加');
-      setEditModalVisible(false);
-      setAddModalVisible(false);
-      form.resetFields();
-    } else {
-      message.error(editingChain ? '更新失败' : '添加失败');
+      notifications.show({
+        title: editingChain ? '更新成功' : '添加成功',
+        message: editingChain ? '链配置已更新' : '新链已添加',
+        color: 'green',
+      });
+      setFormOpened(false);
+      resetForm();
+      return;
     }
+
+    notifications.show({
+      title: editingChain ? '更新失败' : '添加失败',
+      message: '请检查参数并重试',
+      color: 'red',
+    });
   };
 
   const handleDelete = async (chainId: string) => {
     const success = await deleteChain(chainId);
-    if (success) {
-      message.success('链已删除');
-    } else {
-      message.error('删除失败');
-    }
+    notifications.show({
+      title: success ? '删除成功' : '删除失败',
+      message: success ? `链 ${chainId} 已删除` : '请稍后重试',
+      color: success ? 'green' : 'red',
+    });
   };
-
-  const columns: ColumnsType<ChainConfig> = [
-    {
-      title: '链ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      render: (id: string, record) => (
-        <Tag color={record.color}>{id}</Tag>
-      )
-    },
-    {
-      title: '显示名称',
-      dataIndex: 'displayName',
-      key: 'displayName',
-      width: 150
-    },
-    {
-      title: '符号',
-      dataIndex: 'symbol',
-      key: 'symbol',
-      width: 80
-    },
-    {
-      title: '颜色',
-      dataIndex: 'color',
-      key: 'color',
-      width: 80,
-      render: (color: string) => (
-        <div 
-          className="w-6 h-6 rounded border"
-          style={{ backgroundColor: color }}
-        />
-      )
-    },
-    {
-      title: '排序',
-      dataIndex: 'order',
-      key: 'order',
-      width: 80,
-      sorter: (a, b) => a.order - b.order
-    },
-    {
-      title: '状态',
-      dataIndex: 'enabled',
-      key: 'enabled',
-      width: 100,
-      render: (enabled: boolean, record) => (
-        <Switch
-          checked={enabled}
-          onChange={(checked) => handleToggleEnabled(record.id, checked)}
-          size="small"
-        />
-      )
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 120,
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<Edit className="h-4 w-4" />}
-            onClick={() => handleEdit(record)}
-          />
-          <Popconfirm
-            title="确定删除这个链吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<Trash2 className="h-4 w-4" />}
-            />
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ];
-
-  const formItems = (
-    <>
-      <Form.Item
-        name="id"
-        label="链ID"
-        rules={[{ required: true, message: '请输入链ID' }]}
-      >
-        <Input placeholder="如: BSC, ETH, SOL" disabled={!!editingChain} />
-      </Form.Item>
-      
-      <Form.Item
-        name="name"
-        label="链名称"
-        rules={[{ required: true, message: '请输入链名称' }]}
-      >
-        <Input placeholder="如: bsc, ethereum, solana" />
-      </Form.Item>
-      
-      <Form.Item
-        name="displayName"
-        label="显示名称"
-        rules={[{ required: true, message: '请输入显示名称' }]}
-      >
-        <Input placeholder="如: Binance Smart Chain" />
-      </Form.Item>
-      
-      <Form.Item
-        name="symbol"
-        label="代币符号"
-        rules={[{ required: true, message: '请输入代币符号' }]}
-      >
-        <Input placeholder="如: BNB, ETH, SOL" />
-      </Form.Item>
-      
-      <Form.Item
-        name="color"
-        label="主题色"
-        rules={[{ required: true, message: '请选择主题色' }]}
-      >
-        <ColorPicker showText />
-      </Form.Item>
-      
-      <Form.Item
-        name="txExplorerUrl"
-        label="交易浏览器URL"
-        rules={[{ required: true, message: '请输入交易浏览器URL' }]}
-      >
-        <Input placeholder="如: https://bscscan.com/tx/" />
-      </Form.Item>
-      
-      <Form.Item
-        name="addressExplorerUrl"
-        label="地址浏览器URL"
-        rules={[{ required: true, message: '请输入地址浏览器URL' }]}
-      >
-        <Input placeholder="如: https://bscscan.com/address/" />
-      </Form.Item>
-      
-      <Form.Item
-        name="order"
-        label="排序"
-        rules={[{ required: true, message: '请输入排序' }]}
-      >
-        <InputNumber min={1} placeholder="排序数字，越小越靠前" style={{ width: '100%' }} />
-      </Form.Item>
-      
-      <Form.Item
-        name="enabled"
-        label="启用状态"
-        valuePropName="checked"
-      >
-        <Switch />
-      </Form.Item>
-    </>
-  );
 
   return (
     <>
-      <Modal
-        title={
-          <div className="flex items-center space-x-2">
-            <Settings className="h-5 w-5" />
-            <span>链配置管理</span>
-          </div>
-        }
-        open={visible}
-        onCancel={onClose}
-        width={800}
-        footer={[
-          <Button key="close" onClick={onClose}>
-            关闭
-          </Button>
-        ]}
-      >
-        <div className="mb-4">
-          <Button
-            type="primary"
-            icon={<Plus className="h-4 w-4" />}
-            onClick={handleAdd}
-          >
-            添加新链
-          </Button>
-        </div>
-        
-        <Table
-          columns={columns}
-          dataSource={chains}
-          rowKey="id"
-          size="small"
-          pagination={false}
-          scroll={{ y: 400 }}
-        />
+      <Modal opened={visible} onClose={onClose} size="xl" title="链配置管理" centered>
+        <Stack>
+          <Group justify="space-between">
+            <Text c="dimmed" size="sm">
+              管理可用链、浏览器链接、显示顺序和启用状态
+            </Text>
+            <Button leftSection={<Plus size={16} />} onClick={openAddModal}>
+              添加新链
+            </Button>
+          </Group>
+
+          <ScrollArea h={460}>
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>链ID</Table.Th>
+                  <Table.Th>显示名称</Table.Th>
+                  <Table.Th>符号</Table.Th>
+                  <Table.Th>颜色</Table.Th>
+                  <Table.Th>排序</Table.Th>
+                  <Table.Th>启用</Table.Th>
+                  <Table.Th>操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {sortedChains.map((chain) => (
+                  <Table.Tr key={chain.id}>
+                    <Table.Td>
+                      <Badge color="blue" variant="light">
+                        {chain.id}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>{chain.displayName}</Table.Td>
+                    <Table.Td>{chain.symbol}</Table.Td>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <span
+                          style={{
+                            width: 14,
+                            height: 14,
+                            borderRadius: '50%',
+                            display: 'inline-block',
+                            backgroundColor: chain.color,
+                          }}
+                        />
+                        <Text size="xs">{chain.color}</Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>{chain.order}</Table.Td>
+                    <Table.Td>
+                      <Switch
+                        checked={chain.enabled}
+                        onChange={(e) => handleToggleEnabled(chain.id, e.currentTarget.checked)}
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={4}>
+                        <ActionIcon variant="subtle" onClick={() => openEditModal(chain)}>
+                          <Edit size={16} />
+                        </ActionIcon>
+                        <ActionIcon color="red" variant="subtle" onClick={() => handleDelete(chain.id)}>
+                          <Trash2 size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        </Stack>
       </Modal>
 
-      {/* 编辑模态框 */}
       <Modal
-        title="编辑链配置"
-        open={editModalVisible}
-        onCancel={() => setEditModalVisible(false)}
-        onOk={() => form.submit()}
-        okText="保存"
-        cancelText="取消"
+        opened={formOpened}
+        onClose={() => setFormOpened(false)}
+        title={editingChain ? '编辑链配置' : '添加新链'}
+        size="lg"
+        centered
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSave}
-        >
-          {formItems}
-        </Form>
-      </Modal>
+        <Stack>
+          <Group grow>
+            <TextInput
+              label="链ID"
+              placeholder="如: BSC"
+              value={formState.id}
+              disabled={Boolean(editingChain)}
+              onChange={(e) => setFormState((prev) => ({ ...prev, id: e.currentTarget.value }))}
+              required
+            />
+            <TextInput
+              label="链名称"
+              placeholder="如: bsc"
+              value={formState.name}
+              onChange={(e) => setFormState((prev) => ({ ...prev, name: e.currentTarget.value }))}
+              required
+            />
+          </Group>
 
-      {/* 添加模态框 */}
-      <Modal
-        title="添加新链"
-        open={addModalVisible}
-        onCancel={() => setAddModalVisible(false)}
-        onOk={() => form.submit()}
-        okText="添加"
-        cancelText="取消"
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSave}
-          initialValues={{ enabled: true, order: 999 }}
-        >
-          {formItems}
-        </Form>
+          <Group grow>
+            <TextInput
+              label="显示名称"
+              placeholder="如: Binance Smart Chain"
+              value={formState.displayName}
+              onChange={(e) => setFormState((prev) => ({ ...prev, displayName: e.currentTarget.value }))}
+              required
+            />
+            <TextInput
+              label="代币符号"
+              placeholder="如: BNB"
+              value={formState.symbol}
+              onChange={(e) => setFormState((prev) => ({ ...prev, symbol: e.currentTarget.value }))}
+              required
+            />
+          </Group>
+
+          <Group grow>
+            <ColorInput
+              label="主题色"
+              value={formState.color}
+              onChange={(value) => setFormState((prev) => ({ ...prev, color: value }))}
+            />
+            <NumberInput
+              label="排序"
+              min={1}
+              value={formState.order}
+              onChange={(value) => setFormState((prev) => ({ ...prev, order: Number(value) || 999 }))}
+            />
+          </Group>
+
+          <TextInput
+            label="交易浏览器URL"
+            placeholder="https://bscscan.com/tx/"
+            value={formState.txExplorerUrl}
+            onChange={(e) => setFormState((prev) => ({ ...prev, txExplorerUrl: e.currentTarget.value }))}
+          />
+
+          <TextInput
+            label="地址浏览器URL"
+            placeholder="https://bscscan.com/address/"
+            value={formState.addressExplorerUrl}
+            onChange={(e) => setFormState((prev) => ({ ...prev, addressExplorerUrl: e.currentTarget.value }))}
+          />
+
+          <Switch
+            label="启用该链"
+            checked={formState.enabled}
+            onChange={(e) => setFormState((prev) => ({ ...prev, enabled: e.currentTarget.checked }))}
+          />
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setFormOpened(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSave}>{editingChain ? '保存修改' : '添加链'}</Button>
+          </Group>
+        </Stack>
       </Modal>
     </>
   );

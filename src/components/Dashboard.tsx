@@ -1,492 +1,387 @@
-import React, { useState, useEffect, useMemo,  useCallback } from 'react';
-import { 
-  Layout, 
-  Card, 
-  Button, 
-  Row, 
-  Col, 
-  Typography, 
-  Space, 
-  Input,
-  Select,
-  DatePicker,
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActionIcon,
+  Alert,
   Badge,
-  Tag,
-  Table,
-  Modal,
-  List,
-  Drawer,
-  message,
-  Popconfirm,
+  Box,
+  Button,
+  Card,
   Checkbox,
-  Alert
-} from 'antd';
-import { 
-  LogOut, 
-  Search, 
+  Divider,
+  Drawer,
+  Group,
+  Menu,
+  Pagination,
+  Paper,
+  ScrollArea,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+import { DatePickerInput } from '@mantine/dates';
+import { useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import {
   AlertTriangle,
-  Eye,
-  Trash2,
+  ArrowLeft,
   Bell,
+  Eye,
+  Filter,
+  LogOut,
+  Menu as MenuIcon,
+  Search,
+  Server,
+  Trash2,
   Wifi,
   WifiOff,
-  Menu as MenuIcon,
-  Filter,
-  ArrowLeft,
-  Server
 } from 'lucide-react';
-import { TradeInfo, SearchFilters, ProfitEvent, WarningInfo, TagProfitInfo, TokenProfitInfo, NodeStatusResponse } from '../types';
+import dayjs from 'dayjs';
+import { io, Socket } from 'socket.io-client';
+import {
+  NodeStatusResponse,
+  ProfitEvent,
+  SearchFilters,
+  TagProfitInfo,
+  TokenProfitInfo,
+  TradeInfo,
+  WarningInfo,
+} from '../types';
 import { apiService } from '../services/api';
 import { useChains } from '../hooks/useChains';
 import { useScrollPreservation } from '../hooks/useScrollPreservation';
 import ChainManager from './ChainManager';
 import NodeStatusModal from './NodeStatusModal';
-import { MobileTradeCard, SidebarContent, ProfitStatistics } from './TradingComponents';
-import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
-import { io, Socket } from 'socket.io-client';
-
-const { Header, Content, Sider } = Layout;
-const { Title, Text, Paragraph } = Typography;
-const { RangePicker } = DatePicker;
+import { MobileTradeCard, ProfitStatistics, SidebarContent } from './TradingComponents';
 
 interface DashboardProps {
   user: any;
   onLogout: () => void;
 }
 
+const DESKTOP_PAGE_SIZE = 20;
+
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
-  const { 
-    enabledChains, 
-    getChainColor, 
-    getChainDisplayName, 
-    getExplorerUrl 
-  } = useChains();
-  
+  const isMobile = useMediaQuery('(max-width: 48em)');
+  const { enabledChains, getChainColor, getChainDisplayName, getExplorerUrl } = useChains();
+
   const [selectedChain, setSelectedChain] = useState<string>('');
   const [trades, setTrades] = useState<TradeInfo[]>([]);
   const [searchResults, setSearchResults] = useState<TradeInfo[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [warnings, setWarnings] = useState<WarningInfo[]>([]);
-  
-  // 🔄 重构：按链存储数据，避免前端计算
   const [chainTagStats, setChainTagStats] = useState<{ [chain: string]: TagProfitInfo[] }>({});
   const [chainTokenStats, setChainTokenStats] = useState<{ [chain: string]: TokenProfitInfo[] }>({});
   const [chainProfits, setChainProfits] = useState<{ [chain: string]: ProfitEvent }>({});
-  
+
   const [loading, setLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
-  const [chainManagerVisible, setChainManagerVisible] = useState(false);
-  const [filters, setFilters] = useState<SearchFilters>({
-    sort: 'createdAt',
-    order: 'desc',
-    limit: 500
-  });
-
-  // 移动端状态
-  const [isMobile, setIsMobile] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [filtersVisible, setFiltersVisible] = useState(false);
-
-  // 模态框状态
-  const [tradeDetailVisible, setTradeDetailVisible] = useState(false);
-  const [selectedTrade, setSelectedTrade] = useState<TradeInfo | null>(null);
-  const [warningDrawerVisible, setWarningDrawerVisible] = useState(false);
-  const [warningDetailVisible, setWarningDetailVisible] = useState(false);
-  const [selectedWarning, setSelectedWarning] = useState<WarningInfo | null>(null);
-
-  // 批量删除预警相关状态
-  const [selectedWarningIds, setSelectedWarningIds] = useState<number[]>([]);
-  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
-
-  // Socket.IO 连接
   const [socket, setSocket] = useState<Socket | null>(null);
 
-  // 节点状态相关状态
+  const [chainManagerVisible, setChainManagerVisible] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [warningDrawerVisible, setWarningDrawerVisible] = useState(false);
+  const [warningDetailVisible, setWarningDetailVisible] = useState(false);
+
+  const [tradeDetailVisible, setTradeDetailVisible] = useState(false);
+  const [selectedTrade, setSelectedTrade] = useState<TradeInfo | null>(null);
+  const [selectedWarning, setSelectedWarning] = useState<WarningInfo | null>(null);
+
+  const [selectedWarningIds, setSelectedWarningIds] = useState<number[]>([]);
+
   const [nodeStatus, setNodeStatus] = useState<NodeStatusResponse | null>(null);
   const [nodeStatusModalVisible, setNodeStatusModalVisible] = useState(false);
   const [nodeStatusLoading, setNodeStatusLoading] = useState(false);
 
-  // 当前链的标签统计数据 - 直接使用按链分组的数据
-  const currentChainTagStats = useMemo(() => {
-    const chainStats = chainTagStats[selectedChain] || [];
-    // 简单排序处理，避免复杂计算
-    const sortedStats = [...chainStats].sort((a, b) => b.totalProfit - a.totalProfit);
-    console.log('🔍 排序后的标签统计:', sortedStats);
-    
-    return sortedStats;
-  }, [chainTagStats, selectedChain]);
+  const [page, setPage] = useState(1);
 
-  // 代币收益滚动容器ref - 使用滚动保持hook
-  const tokenScrollRef = useScrollPreservation({ 
-    dependencies: [chainTokenStats], 
-    enabled: true
+  const [filters, setFilters] = useState<SearchFilters>({
+    sort: 'createdAt',
+    order: 'desc',
+    limit: 500,
+    keyword: '',
+    tag: '',
   });
+  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
 
-  // 设置默认选中的链
+  const tokenScrollRef = useScrollPreservation({ dependencies: [chainTokenStats], enabled: true });
+
   useEffect(() => {
     if (enabledChains.length > 0 && !selectedChain) {
       setSelectedChain(enabledChains[0].id);
     }
   }, [enabledChains, selectedChain]);
 
-  // 检测屏幕尺寸
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+    if (!selectedChain) return;
+    setFilters((prev) => ({ ...prev, chain: selectedChain }));
+    setPage(1);
+    if (isSearchMode) {
+      setIsSearchMode(false);
+      setSearchResults([]);
+    }
+  }, [selectedChain]);
 
-  // Socket.IO连接 - 简化版本
+  const currentChainTagStats = useMemo(() => {
+    return [...(chainTagStats[selectedChain] || [])].sort((a, b) => b.totalProfit - a.totalProfit);
+  }, [chainTagStats, selectedChain]);
+
+  const currentChainProfit = useMemo(() => chainProfits[selectedChain], [chainProfits, selectedChain]);
+
+  const displayTrades = useMemo(() => {
+    const base = isSearchMode ? searchResults : trades.filter((trade) => trade.chain === selectedChain);
+    return base;
+  }, [isSearchMode, searchResults, selectedChain, trades]);
+
+  const paginatedTrades = useMemo(() => {
+    if (isMobile) return displayTrades.slice(0, 50);
+    const start = (page - 1) * DESKTOP_PAGE_SIZE;
+    return displayTrades.slice(start, start + DESKTOP_PAGE_SIZE);
+  }, [displayTrades, isMobile, page]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(displayTrades.length / DESKTOP_PAGE_SIZE)), [displayTrades.length]);
+
+  const getWebSocketUrl = (): string => {
+    if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
+    if (import.meta.env.DEV) return 'http://localhost:3000';
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:3000`;
+  };
+
   useEffect(() => {
     let socketInstance: Socket | null = null;
-    let reconnectTimer: number | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let isManualClose = false;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5; // 增加重连次数
+    const maxReconnectAttempts = 5;
 
     const connectSocket = () => {
       if (reconnectAttempts >= maxReconnectAttempts) {
-        setWsError('连接失败次数过多，请刷新页面重试');
+        setWsError('连接失败次数过多，请刷新页面');
         return;
       }
 
       try {
-
-        
-        // 获取JWT token用于认证
-        const token = localStorage.getItem('token');
-        
-        // 根据环境动态获取WebSocket URL
-        const getWebSocketUrl = (): string => {
-          // 优先使用环境变量
-          if (import.meta.env.VITE_API_BASE_URL) {
-            return import.meta.env.VITE_API_BASE_URL;
-          }
-          
-          // 开发环境
-          if (import.meta.env.DEV) {
-            return 'http://localhost:3000';
-          }
-          
-          // 生产环境：使用当前域名+端口3000
-          const { protocol, hostname } = window.location;
-          return `${protocol}//${hostname}:3000`;
-        };
-        
-        const wsUrl = getWebSocketUrl();
-        
-        socketInstance = io(wsUrl, {
+        socketInstance = io(getWebSocketUrl(), {
           path: '/socket.io',
-          transports: ['polling', 'websocket'], // 支持WebSocket和polling
-          timeout: 45000,  // 匹配后端的connectTimeout
+          transports: ['polling', 'websocket'],
+          timeout: 45000,
           forceNew: true,
-          reconnection: false, // 手动控制重连
+          reconnection: false,
           autoConnect: true,
           auth: {
-            token: token // 传递JWT token用于WebSocket认证
-          }
+            token: localStorage.getItem('token'),
+          },
         });
-        
+
         socketInstance.on('connect', () => {
           setWsConnected(true);
           setWsError(null);
           setSocket(socketInstance);
           reconnectAttempts = 0;
-          
-          // 加入当前选中的链房间
           if (selectedChain) {
             socketInstance?.emit('join-chain', selectedChain);
           }
-          
-          // 建立心跳检测
-          const pingInterval = setInterval(() => {
-            if (socketInstance && socketInstance.connected) {
-              socketInstance.emit('ping', { timestamp: Date.now() });
-            } else {
-              clearInterval(pingInterval);
-            }
-          }, 30000); // 每30秒ping一次
         });
-        
+
         socketInstance.on('disconnect', (reason) => {
           setWsConnected(false);
           setSocket(null);
-          
           if (!isManualClose && reason !== 'io client disconnect') {
-            reconnectAttempts++;
-            // 优化重连延迟策略：1s, 2s, 5s, 10s, 15s
+            reconnectAttempts += 1;
             const delays = [1000, 2000, 5000, 10000, 15000];
             const delay = delays[Math.min(reconnectAttempts - 1, delays.length - 1)];
-            setWsError(`连接断开，${delay/1000}秒后重连 (${reconnectAttempts}/${maxReconnectAttempts})`);
-            
-            reconnectTimer = setTimeout(() => {
-              connectSocket();
-            }, delay);
-          }
-        });
-        
-        // 监听各种数据更新事件 - 只在非搜索模式下更新
-        socketInstance.on('new_trade', (data) => {
-          if (!isSearchMode) {
-            const tradeData = data.data || data;
-            if (tradeData) {
-              setTrades(prev => {
-                const exists = prev.some(t => t.hash === tradeData.hash);
-                if (!exists) {
-                  message.success(`新交易: ${tradeData.chain} - $${tradeData.income?.toFixed(4) || '0.0000'}`, 2);
-                  return [tradeData, ...prev.slice(0, 499)];
-                }
-                return prev;
-              });
-            }
+            setWsError(`连接断开，${delay / 1000}秒后重连 (${reconnectAttempts}/${maxReconnectAttempts})`);
+            reconnectTimer = setTimeout(connectSocket, delay);
           }
         });
 
+        socketInstance.on('new_trade', (data) => {
+          if (isSearchMode) return;
+          const tradeData = data.data || data;
+          if (!tradeData) return;
+          setTrades((prev) => {
+            const exists = prev.some((t) => t.hash === tradeData.hash);
+            if (exists) return prev;
+            notifications.show({
+              title: '新交易',
+              message: `${tradeData.chain} - $${tradeData.income?.toFixed(4) || '0.0000'}`,
+              color: 'green',
+            });
+            return [tradeData, ...prev.slice(0, 499)];
+          });
+        });
+
         socketInstance.on('trade_update', (data) => {
-          if (!isSearchMode) {
-            const tradeData = data.data || data;
-            if (tradeData) {
-              setTrades(prev => {
-                const exists = prev.some(t => t.hash === tradeData.hash);
-                if (!exists) {
-                  return [tradeData, ...prev.slice(0, 499)];
-                }
-                return prev;
-              });
-            }
-          }
+          if (isSearchMode) return;
+          const tradeData = data.data || data;
+          if (!tradeData) return;
+          setTrades((prev) => {
+            const exists = prev.some((t) => t.hash === tradeData.hash);
+            if (exists) return prev;
+            return [tradeData, ...prev.slice(0, 499)];
+          });
         });
 
         socketInstance.on('new_warning', (data) => {
           const warningData = data.data || data;
-          if (warningData) {
-            setWarnings(prev => {
-              // 检查是否已存在相同ID的警告
-              const exists = prev.some(w => w.id === warningData.id);
-              if (!exists) {
-                message.warning(`新预警: ${warningData.chain} - ${warningData.type}`, 3);
-                return [warningData, ...prev];
-              }
-              return prev;
+          if (!warningData) return;
+          setWarnings((prev) => {
+            if (prev.some((w) => w.id === warningData.id)) return prev;
+            notifications.show({
+              title: '新预警',
+              message: `${warningData.chain} - ${warningData.type}`,
+              color: 'yellow',
             });
-          }
+            return [warningData, ...prev];
+          });
         });
 
         socketInstance.on('warning_update', (data) => {
           const warningData = data.data || data;
-          if (warningData) {
-            setWarnings(prev => {
-              // 检查是否已存在相同ID的警告
-              const exists = prev.some(w => w.id === warningData.id);
-              if (!exists) {
-                return [warningData, ...prev];
-              }
-              return prev;
-            });
-          }
+          if (!warningData) return;
+          setWarnings((prev) => {
+            if (prev.some((w) => w.id === warningData.id)) return prev;
+            return [warningData, ...prev];
+          });
         });
 
-        // 监听标签收益更新 - 优化：直接使用WebSocket推送的数据
         socketInstance.on('tag_profits_changed', async (data) => {
-          console.log('🎯 收到标签收益更新事件:', data);
           const tagProfitsData = data.data || data;
-          console.log('🎯 解析后的标签收益数据:', tagProfitsData);
-          
-          if (tagProfitsData && tagProfitsData.chain && Array.isArray(tagProfitsData.tagProfits)) {
-            // ✅ 直接使用WebSocket推送的链数据
-            setChainTagStats(prev => ({
-              ...prev,
-              [tagProfitsData.chain]: tagProfitsData.tagProfits
-            }));
-            console.log('📊 标签收益数据已通过WebSocket更新，数据量:', tagProfitsData.tagProfits.length);
-          } else if (tagProfitsData && Array.isArray(tagProfitsData)) {
-            // 兼容格式：如果是完整的标签数组，按链分组
-            const tagStatsByChain: { [chain: string]: TagProfitInfo[] } = {};
-            tagProfitsData.forEach(tag => {
-              if (tag.chain) {
-                if (!tagStatsByChain[tag.chain]) {
-                  tagStatsByChain[tag.chain] = [];
-                }
-                tagStatsByChain[tag.chain].push(tag);
-              }
+          if (tagProfitsData?.chain && Array.isArray(tagProfitsData.tagProfits)) {
+            setChainTagStats((prev) => ({ ...prev, [tagProfitsData.chain]: tagProfitsData.tagProfits }));
+            return;
+          }
+
+          if (Array.isArray(tagProfitsData)) {
+            const grouped: { [chain: string]: TagProfitInfo[] } = {};
+            tagProfitsData.forEach((tag) => {
+              if (!tag.chain) return;
+              if (!grouped[tag.chain]) grouped[tag.chain] = [];
+              grouped[tag.chain].push(tag);
             });
-            setChainTagStats(tagStatsByChain);
-            console.log('📊 标签收益数据已通过WebSocket更新，总数据量:', tagProfitsData.length);
-          } else {
-            console.warn('⚠️ 标签收益数据格式不正确，回退到API调用:', tagProfitsData);
-            // 🔄 回退方案：重新调用API获取完整数据
-            try {
-              const updatedTagData = await apiService.getTagDailyProfit();
-              console.log('🔄 通过API重新获取标签收益数据:', updatedTagData);
-              if (updatedTagData && Array.isArray(updatedTagData)) {
-                const tagStatsByChain: { [chain: string]: TagProfitInfo[] } = {};
-                updatedTagData.forEach(tag => {
-                  if (tag.chain) {
-                    if (!tagStatsByChain[tag.chain]) {
-                      tagStatsByChain[tag.chain] = [];
-                    }
-                    tagStatsByChain[tag.chain].push(tag);
-                  }
-                });
-                setChainTagStats(tagStatsByChain);
-              }
-            } catch (error) {
-              console.error('❌ API回退获取标签收益失败:', error);
-            }
+            setChainTagStats(grouped);
+            return;
+          }
+
+          try {
+            const fallback = await apiService.getTagDailyProfit();
+            const grouped: { [chain: string]: TagProfitInfo[] } = {};
+            fallback.forEach((tag) => {
+              if (!tag.chain) return;
+              if (!grouped[tag.chain]) grouped[tag.chain] = [];
+              grouped[tag.chain].push(tag);
+            });
+            setChainTagStats(grouped);
+          } catch {
+            // ignore fallback errors
           }
         });
 
-        // 监听代币收益更新 - 优化：直接使用WebSocket推送的数据
         socketInstance.on('token_profits_changed', (data) => {
           const tokenProfitsData = data.data || data;
-          
-          if (tokenProfitsData && tokenProfitsData.tokens) {
-            // ✅ 直接使用WebSocket推送的完整代币数据
-            setChainTokenStats(prev => ({
-              ...prev,
-              [selectedChain]: tokenProfitsData.tokens
-            }));
-            console.log('💰 代币收益数据已通过WebSocket更新');
-          } else if (tokenProfitsData && tokenProfitsData.chain && tokenProfitsData.tokenProfits) {
-            // 兼容旧格式：如果推送的是单个链的数据，则更新对应链的数据
-            setChainTokenStats(prev => ({
-              ...prev,
-              [selectedChain]: tokenProfitsData.tokenProfits
-            }));
-            console.log(`💰 ${selectedChain} 链代币收益数据已更新`);
+          if (tokenProfitsData?.chain && Array.isArray(tokenProfitsData.tokenProfits)) {
+            setChainTokenStats((prev) => ({ ...prev, [tokenProfitsData.chain]: tokenProfitsData.tokenProfits }));
+            return;
+          }
+          if (tokenProfitsData?.tokens && selectedChain) {
+            setChainTokenStats((prev) => ({ ...prev, [selectedChain]: tokenProfitsData.tokens }));
           }
         });
 
         socketInstance.on('profit_update', (data) => {
           const profitData = data.data || data;
-          if (profitData && profitData.chain) {
-            setChainProfits(prev => ({
-              ...prev,
-              [profitData.chain]: profitData
-            }));
+          if (profitData?.chain) {
+            setChainProfits((prev) => ({ ...prev, [profitData.chain]: profitData }));
           }
         });
 
         socketInstance.on('profit_changed', (data) => {
           const profitData = data.data || data;
-          if (profitData && profitData.chain) {
-            setChainProfits(prev => ({
-              ...prev,
-              [profitData.chain]: profitData
-            }));
+          if (profitData?.chain) {
+            setChainProfits((prev) => ({ ...prev, [profitData.chain]: profitData }));
           }
         });
-        
-        socketInstance.on('pong', (_) => {
-          // 接收pong响应，连接正常
-          console.log('🏓 收到pong响应，连接正常');
-        });
 
-        // 监听节点状态更新
         socketInstance.on('node_status_update', (data) => {
           const nodeStatusData = data.data || data;
           if (nodeStatusData) {
             setNodeStatus(nodeStatusData);
           }
         });
-        
-        socketInstance.on('error', (error) => {
-          console.error('❌ Socket.IO错误:', error);
-          if (error.message && error.message.includes('需要登录')) {
-            setWsError('WebSocket认证失败，请重新登录');
-          }
-        });
-        
+
         socketInstance.on('connect_error', (error) => {
-          console.error('❌ Socket.IO连接错误:', error);
           setWsConnected(false);
           setSocket(null);
-          
-          // 根据错误类型设置不同的错误信息
           if (error.message.includes('timeout')) {
-            setWsError('连接超时，请检查网络状态');
+            setWsError('连接超时，请检查网络');
           } else if (error.message.includes('ECONNREFUSED')) {
-            setWsError('服务器拒绝连接，请稍后再试');
+            setWsError('服务器拒绝连接');
           } else {
             setWsError(`连接错误: ${error.message}`);
           }
-          
-          // 连接失败也要尝试重连
+
           if (!isManualClose && reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++;
+            reconnectAttempts += 1;
             const delays = [1000, 2000, 5000, 10000, 15000];
             const delay = delays[Math.min(reconnectAttempts - 1, delays.length - 1)];
-            
-            reconnectTimer = setTimeout(() => {
-              connectSocket();
-            }, delay);
+            reconnectTimer = setTimeout(connectSocket, delay);
           }
         });
-        
       } catch (error: any) {
-        console.error('❌ Socket.IO初始化失败:', error);
         setWsConnected(false);
         setWsError(`初始化失败: ${error.message}`);
       }
     };
 
-    // 网络状态检测
     const handleOnline = () => {
-      console.log('📡 网络连接恢复');
       if (!socketInstance || !socketInstance.connected) {
-        reconnectAttempts = 0; // 重置重连次数
+        reconnectAttempts = 0;
         connectSocket();
       }
     };
-    
+
     const handleOffline = () => {
-      console.log('📡 网络连接断开');
       setWsError('网络连接断开');
       setWsConnected(false);
     };
-    
-    // 监听网络状态变化
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
-    // 延迟连接
-    const connectTimer = setTimeout(() => {
-      console.log('🚀 开始建立Socket.IO连接...');
-      connectSocket();
-    }, 2000);
+
+    const connectTimer = setTimeout(connectSocket, 1500);
 
     return () => {
       isManualClose = true;
       clearTimeout(connectTimer);
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-      }
-      if (socketInstance) {
-        console.log('🔌 手动关闭Socket.IO连接');
-        socketInstance.disconnect();
-      }
-      // 移除网络状态监听器
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socketInstance) socketInstance.disconnect();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [selectedChain, isSearchMode]);
+  }, [isSearchMode, selectedChain]);
 
-  // 当选中链变化时，加入新的房间
   useEffect(() => {
     if (socket && socket.connected && selectedChain) {
-
       socket.emit('join-chain', selectedChain);
     }
-  }, [socket, selectedChain]);
+  }, [selectedChain, socket]);
 
-  // 获取数据
+  const fetchNodeStatus = async () => {
+    try {
+      setNodeStatusLoading(true);
+      const data = await apiService.getNodeStatus();
+      setNodeStatus(data);
+    } catch {
+      notifications.show({ title: '节点状态', message: '获取节点状态失败', color: 'red' });
+    } finally {
+      setNodeStatusLoading(false);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -494,1067 +389,648 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         apiService.getHistory(),
         apiService.getProfit(),
         apiService.getTagDailyProfit(),
-        apiService.getTokenStats()
+        apiService.getTokenStats(),
       ]);
 
       setTrades(historyData.trades || []);
-      // 对警告数据进行去重处理
-      const uniqueWarnings = (historyData.warnings || []).filter((warning: WarningInfo, index: number, self: WarningInfo[]) => 
-        index === self.findIndex((w: WarningInfo) => w.id === warning.id)
+
+      const uniqueWarnings = (historyData.warnings || []).filter(
+        (warning: WarningInfo, index: number, self: WarningInfo[]) =>
+          index === self.findIndex((w: WarningInfo) => w.id === warning.id)
       );
       setWarnings(uniqueWarnings);
-      
-      // 处理收益数据 - 按链分组
-      if (profitData && Array.isArray(profitData)) {
+
+      if (Array.isArray(profitData)) {
         const profitsByChain: { [chain: string]: ProfitEvent } = {};
-        profitData.forEach(profit => {
+        profitData.forEach((profit) => {
           if (profit.chain) {
             profitsByChain[profit.chain] = profit;
           }
         });
         setChainProfits(profitsByChain);
       }
-      
-      console.log('📊 初始标签收益数据:', tagProfitData);
-      // 处理标签收益数据 - 按链分组
-      if (tagProfitData && Array.isArray(tagProfitData)) {
-        const tagStatsByChain: { [chain: string]: TagProfitInfo[] } = {};
-        tagProfitData.forEach(tag => {
-          if (tag.chain) {
-            if (!tagStatsByChain[tag.chain]) {
-              tagStatsByChain[tag.chain] = [];
-            }
-            tagStatsByChain[tag.chain].push(tag);
-          }
+
+      if (Array.isArray(tagProfitData)) {
+        const grouped: { [chain: string]: TagProfitInfo[] } = {};
+        tagProfitData.forEach((tag) => {
+          if (!tag.chain) return;
+          if (!grouped[tag.chain]) grouped[tag.chain] = [];
+          grouped[tag.chain].push(tag);
         });
-        setChainTagStats(tagStatsByChain);
+        setChainTagStats(grouped);
       }
+
       setChainTokenStats(tokenData?.tokens || {});
-      
-    } catch (error) {
-      console.error('❌ 获取数据失败:', error);
-      message.error('获取数据失败');
+    } catch {
+      notifications.show({ title: '加载失败', message: '获取数据失败', color: 'red' });
     } finally {
       setLoading(false);
     }
   };
 
-  // 获取节点状态
-  const fetchNodeStatus = async () => {
-    try {
-      setNodeStatusLoading(true);
-      const data = await apiService.getNodeStatus();
-      setNodeStatus(data);
-    } catch (error) {
-      console.error('❌ 获取节点状态失败:', error);
-      message.error('获取节点状态失败');
-    } finally {
-      setNodeStatusLoading(false);
-    }
-  };
+  useEffect(() => {
+    fetchData();
+    fetchNodeStatus();
+  }, []);
 
-  // 搜索交易
   const searchTrades = useCallback(async () => {
     setLoading(true);
     try {
-      // 如果用户没有选择时间，默认使用当天时间
-      const searchFilters = {
+      const payload: SearchFilters = {
         ...filters,
         start: filters.start || dayjs().format('YYYY-MM-DD'),
-        end: filters.end || dayjs().format('YYYY-MM-DD')
+        end: filters.end || dayjs().format('YYYY-MM-DD'),
       };
-      
-      const data = await apiService.searchTrades(searchFilters);
+
+      const data = await apiService.searchTrades(payload);
       setSearchResults(data);
       setIsSearchMode(true);
-    } catch (error) {
-      console.error('❌ 搜索失败:', error);
-      message.error('搜索失败');
+      setPage(1);
+    } catch {
+      notifications.show({ title: '搜索失败', message: '请稍后重试', color: 'red' });
     } finally {
       setLoading(false);
     }
   }, [filters]);
 
-  // 返回实时模式
   const exitSearchMode = useCallback(() => {
     setIsSearchMode(false);
     setSearchResults([]);
+    setPage(1);
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    fetchNodeStatus(); // 初始获取节点状态
-  }, []);
-
-  useEffect(() => {
-    setFilters(prev => ({ ...prev, chain: selectedChain }));
-    // 切换链时退出搜索模式
-    if (isSearchMode) {
-      exitSearchMode();
-    }
-  }, [selectedChain]);
-
-  // 当前链的收益数据
-  const currentChainProfit = useMemo(() => {
-    return chainProfits[selectedChain];
-  }, [chainProfits, selectedChain]);
-
-  // 显示的交易数据 - 根据模式选择
-  const displayTrades = useMemo(() => {
-    if (isSearchMode) {
-      return searchResults;
-    }
-    return trades.filter(trade => trade.chain === selectedChain);
-  }, [trades, searchResults, selectedChain, isSearchMode]);
-
-  // 删除单个预警
   const handleDeleteWarning = async (id: number) => {
     try {
       await apiService.deleteWarning(id);
-      setWarnings(prev => prev.filter(w => w.id !== id));
-      // 从选中列表中移除
-      setSelectedWarningIds(prev => prev.filter(wId => wId !== id));
-      message.success('预警已删除');
-    } catch (error) {
-      message.error('删除失败');
+      setWarnings((prev) => prev.filter((w) => w.id !== id));
+      setSelectedWarningIds((prev) => prev.filter((wId) => wId !== id));
+      notifications.show({ title: '删除成功', message: '预警已删除', color: 'green' });
+    } catch {
+      notifications.show({ title: '删除失败', message: '请稍后重试', color: 'red' });
     }
   };
 
-  // 批量删除预警
   const handleBatchDeleteWarnings = async () => {
     if (selectedWarningIds.length === 0) {
-      message.warning('请选择要删除的预警');
+      notifications.show({ title: '未选择', message: '请选择要删除的预警', color: 'yellow' });
       return;
     }
 
-    setBatchDeleteLoading(true);
     try {
-      // 并发删除所有选中的预警
-      await Promise.all(
-        selectedWarningIds.map(id => apiService.deleteWarning(id))
-      );
-      
-      // 从列表中移除已删除的预警
-      setWarnings(prev => prev.filter(w => !selectedWarningIds.includes(w.id)));
+      await Promise.all(selectedWarningIds.map((id) => apiService.deleteWarning(id)));
+      setWarnings((prev) => prev.filter((w) => !selectedWarningIds.includes(w.id)));
+      notifications.show({
+        title: '批量删除成功',
+        message: `成功删除 ${selectedWarningIds.length} 条预警`,
+        color: 'green',
+      });
       setSelectedWarningIds([]);
-      message.success(`成功删除 ${selectedWarningIds.length} 条预警`);
-    } catch (error) {
-      message.error('批量删除失败');
-    } finally {
-      setBatchDeleteLoading(false);
+    } catch {
+      notifications.show({ title: '批量删除失败', message: '请稍后重试', color: 'red' });
     }
   };
 
-  // 处理预警选择
-  const handleWarningSelect = (warningId: number, checked: boolean) => {
-    if (checked) {
-      setSelectedWarningIds(prev => [...prev, warningId]);
-    } else {
-      setSelectedWarningIds(prev => prev.filter(id => id !== warningId));
+  const handleTradeHashClick = async (trade: TradeInfo) => {
+    if (user?.type !== 'admin') return;
+
+    try {
+      const response = await fetch(`/api/trade/${trade.id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (response.ok) {
+        const fullTradeDetail = await response.json();
+        setSelectedTrade({
+          ...fullTradeDetail,
+          created_at: fullTradeDetail.created_at || fullTradeDetail.createdAt || trade.created_at,
+        });
+      } else {
+        setSelectedTrade(trade);
+      }
+    } catch {
+      setSelectedTrade(trade);
     }
+
+    setTradeDetailVisible(true);
   };
 
-  // 全选/取消全选预警
-  const handleSelectAllWarnings = (checked: boolean) => {
-    if (checked) {
-      setSelectedWarningIds(warnings.map(w => w.id));
-    } else {
-      setSelectedWarningIds([]);
-    }
-  };
-
-
-
-  // 手动重连Socket.IO
   const handleReconnectSocket = useCallback(() => {
-    console.log('🔄 手动重连Socket.IO...');
     window.location.reload();
   }, []);
 
-  // 测试Socket.IO连接
   const handleTestSocket = useCallback(() => {
     if (socket && socket.connected) {
-      console.log('🧪 测试Socket.IO连接...');
       socket.emit('ping', { test: true, timestamp: Date.now() });
-      message.info('Socket.IO连接测试中...');
-    } else {
-      message.warning('Socket.IO未连接');
+      notifications.show({ title: '连接测试', message: 'Socket.IO连接测试中...', color: 'blue' });
+      return;
     }
+    notifications.show({ title: '连接测试', message: 'Socket.IO未连接', color: 'yellow' });
   }, [socket]);
 
-  // 处理交易哈希点击 - admin用户可查看详情
-  const handleTradeHashClick = async (trade: TradeInfo) => {
-    if (user?.type === 'admin') {
-      try {
-        // 通过API获取完整的交易详情，确保包含incTokens字段
-        const response = await fetch(`/api/trade/${trade.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        
-        if (response.ok) {
-          const fullTradeDetail = await response.json();
-          setSelectedTrade({
-            ...fullTradeDetail,
-            // 确保时间字段正确
-            created_at: fullTradeDetail.created_at || fullTradeDetail.createdAt || trade.created_at
-          });
-        } else {
-          // 如果API调用失败，使用原始trade对象
-          setSelectedTrade(trade);
-        }
-      } catch (error) {
-        // 出错时使用原始trade对象
-        setSelectedTrade(trade);
-      }
-      setTradeDetailVisible(true);
-    }
-  };
-
-  // 交易卡片点击处理
-  const handleTradeCardClick = React.useCallback((trade: TradeInfo) => {
-    handleTradeHashClick(trade);
-  }, []);
-
-  // 桌面端交易表格列定义 - 禁用排序
-  const tradeColumns: ColumnsType<TradeInfo> = [
-    {
-      title: '交易数',
-      dataIndex: 'txCount',
-      key: 'txCount',
-      width: 80,
-      sorter: false,
-      render: (txCount: number) => (
-        <Text style={{ fontWeight: 'bold' }}>{txCount || 0}</Text>
-      )
-    },
-    {
-      title: '交易类型',
-      dataIndex: 'tags',
-      key: 'type',
-      width: 100,
-      render: (tags: string[]) => (
-        <Tag color="blue">{tags?.[0] || '未知'}</Tag>
-      )
-    },
-    {
-      title: '交易哈希',
-      dataIndex: 'hash',
-      key: 'hash',
-      width: 120,
-      render: (hash: string, record) => (
-        <Text 
-          code 
-          style={{ 
-            fontSize: 11,
-            color: '#999',
-            cursor: user?.type === 'admin' ? 'pointer' : 'default'
-          }}
-          onClick={() => handleTradeHashClick(record)}
-        >
-          {user?.type === 'admin' ? (
-            <Text style={{ color: '#999', fontSize: 11 }}>
-              {hash.slice(0, 10)}...{hash.slice(-8)}
-            </Text>
-          ) : (
-            `${hash.slice(0, 10)}...${hash.slice(-8)}`
-          )}
-        </Text>
-      )
-    },
-    {
-      title: '构建者',
-      dataIndex: 'builder',
-      key: 'builder',
-      width: 80,
-      render: (builder: string) => (
-        <Tag color="purple">{builder}</Tag>
-      )
-    },
-
-    {
-      title: '实际收入',
-      dataIndex: 'income',
-      key: 'income',
-      width: 100,
-      sorter: false,
-      render: (income: number) => (
-        <Text style={{ color: '#1890ff' }}>${income?.toFixed(4) || '0.0000'}</Text>
-      )
-    },
-    {
-      title: '贿赂',
-      dataIndex: 'bribe',
-      key: 'bribe',
-      width: 100,
-      sorter: false,
-      render: (bribe: number) => (
-        <Text style={{ color: '#faad14' }}>${bribe?.toFixed(4) || '0.0000'}</Text>
-      )
-    },
-    {
-      title: '比例',
-      dataIndex: 'ratio',
-      key: 'ratio',
-      width: 80,
-      sorter: false,
-      render: (ratio: number) => (
-        <Text style={{ color: '#f5222d' }}>{ratio?.toFixed(2) || '0.00'}%</Text>
-      )
-    },
-    {
-      title: '标签',
-      dataIndex: 'tags',
-      key: 'tags',
-      width: 120,
-      render: (tags: string[]) => (
-        <Space wrap>
-          {tags?.slice(1).map(tag => (
-            <Tag key={tag}>{tag}</Tag>
-          ))}
-        </Space>
-      )
-    },
-
-  ];
-
-  // 侧边栏操作处理
-  const handleChainSelect = React.useCallback((chainId: string) => {
-    setSelectedChain(chainId);
-  }, []);
-
-  const handleChainManagerOpen = React.useCallback(() => {
-    setChainManagerVisible(true);
-  }, []);
-
-  const handleSidebarClose = React.useCallback(() => {
-    setSidebarVisible(false);
-  }, []);
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-              <Header style={{ backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', borderBottom: '1px solid #f0f0f0', padding: '0 16px 0 16px' }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between', height: '100%' }}>
-          <Space size={isMobile ? "small" : "middle"}>
+    <Box mih="100vh" bg="linear-gradient(170deg, #f4f8ff 0%, #f7fbff 38%, #f3f7ff 100%)">
+      <Paper shadow="sm" withBorder radius={0} p="sm">
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
             {isMobile && (
-              <Button
-                type="text"
-                icon={<MenuIcon className="h-4 w-4" />}
-                onClick={() => setSidebarVisible(true)}
-              />
+              <ActionIcon variant="subtle" onClick={() => setSidebarVisible(true)}>
+                <MenuIcon size={18} />
+              </ActionIcon>
             )}
-            <Title level={4} style={{ margin: 0, fontSize: isMobile ? 16 : 20 }}>MEV Dashboard</Title>
-            <Space size="small">
-              {wsConnected ? (
-                <Wifi className="h-3 w-3 md:h-4 md:w-4 text-green-500" />
-              ) : (
-                <WifiOff className="h-3 w-3 md:h-4 md:w-4 text-red-500" />
-              )}
-              <Badge 
-                status={wsConnected ? "success" : "error"} 
-                text={
-                  <Text style={{ 
-                    fontSize: isMobile ? 10 : 12,
-                    color: wsConnected ? '#52c41a' : '#ff4d4f'
-                  }}>
-                    {wsConnected ? '实时连接' : '连接断开'}
-                  </Text>
-                }
-              />
-              {wsError && !isMobile && (
-                <Button 
-                  type="link" 
-                  size="small" 
-                  onClick={handleReconnectSocket}
-                  style={{ fontSize: 10, padding: '0 4px' }}
-                >
-                  重连
-                </Button>
-              )}
-            </Space>
-            
-            {/* 节点状态统计 */}
-            {!isMobile && nodeStatus && (
-              <Button
-                type="text"
-                size="small"
-                icon={<Server className="h-4 w-4" />}
-                onClick={() => setNodeStatusModalVisible(true)}
-              >
-                <Space size="small">
-                  <Text style={{ fontSize: 11, lineHeight: 1 }}>
-                    节点 {nodeStatus.summary.online}/{nodeStatus.summary.total}
-                  </Text>
-                  <Badge 
-                    status={nodeStatus.summary.offline > 0 ? "error" : "success"}
-                    text={
-                      <Text style={{ fontSize: 10, color: '#999' }}>
-                        {nodeStatus.summary.offline > 0 ? '异常' : '正常'}
-                      </Text>
-                    }
-                  />
-                </Space>
+            <Title order={4}>MEV Dashboard</Title>
+            <Badge color={wsConnected ? 'green' : 'red'} leftSection={wsConnected ? <Wifi size={12} /> : <WifiOff size={12} />}>
+              {wsConnected ? '实时连接' : '连接断开'}
+            </Badge>
+            {!isMobile && wsError && (
+              <Button size="xs" variant="subtle" onClick={handleReconnectSocket}>
+                重连
               </Button>
             )}
-          </Space>
-          <Space size={isMobile ? "small" : "middle"}>
-            <Text style={{ display: isMobile ? 'none' : 'inline' }}>欢迎, {user?.username}</Text>
-            {!isMobile && user?.type === 'admin' && (
-              <Badge count={warnings.length} size="small">
-                <Button
-                  icon={<Bell className="h-4 w-4" />}
-                  onClick={() => setWarningDrawerVisible(true)}
-                >
-                  预警 ({warnings.length})
-                </Button>
-              </Badge>
+            {!isMobile && nodeStatus && (
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<Server size={14} />}
+                onClick={() => setNodeStatusModalVisible(true)}
+              >
+                节点 {nodeStatus.summary.online}/{nodeStatus.summary.total}
+              </Button>
             )}
-            <Button
-              danger
-              icon={<LogOut className="h-3 w-3 md:h-4 md:w-4" />}
-              size={isMobile ? 'small' : 'middle'}
-              onClick={onLogout}
-            >
-              {isMobile ? '' : '退出'}
-            </Button>
-          </Space>
-        </Space>
-      </Header>
+          </Group>
 
-      <Layout>
-        {/* 桌面端侧边栏 */}
+          <Group gap="xs" wrap="nowrap">
+            {!isMobile && <Text size="sm">欢迎, {user?.username}</Text>}
+            {!isMobile && user?.type === 'admin' && (
+              <Button variant="light" leftSection={<Bell size={14} />} onClick={() => setWarningDrawerVisible(true)}>
+                预警 ({warnings.length})
+              </Button>
+            )}
+            <Button color="red" variant="light" leftSection={<LogOut size={14} />} onClick={onLogout}>
+              {!isMobile && '退出'}
+            </Button>
+          </Group>
+        </Group>
+      </Paper>
+
+      <Group align="flex-start" gap="md" p="md" wrap="nowrap">
         {!isMobile && (
-          <Sider width={320} style={{ backgroundColor: 'white', borderRight: '1px solid #f0f0f0' }}>
-            <SidebarContent 
+          <Paper withBorder radius="md" w={320} p="xs" style={{ position: 'sticky', top: 16 }}>
+            <SidebarContent
               enabledChains={enabledChains}
               selectedChain={selectedChain}
-              onChainSelect={handleChainSelect}
+              onChainSelect={setSelectedChain}
               tokenStats={chainTokenStats[selectedChain] || []}
               tokenScrollRef={tokenScrollRef}
               tagStats={currentChainTagStats}
               getExplorerUrl={getExplorerUrl}
               isAdmin={user?.type === 'admin'}
-              isMobile={isMobile}
-              onChainManagerOpen={handleChainManagerOpen}
+              onChainManagerOpen={() => setChainManagerVisible(true)}
             />
-          </Sider>
+          </Paper>
         )}
 
-        {/* 移动端侧边栏抽屉 */}
-        <Drawer
-          title="菜单"
-          placement="left"
-          onClose={() => setSidebarVisible(false)}
-          open={sidebarVisible}
-          width={280}
-        >
-          <SidebarContent 
-            enabledChains={enabledChains}
-            selectedChain={selectedChain}
-            onChainSelect={handleChainSelect}
-            tokenStats={chainTokenStats[selectedChain] || []}
-            tokenScrollRef={tokenScrollRef}
-            tagStats={currentChainTagStats}
-            getExplorerUrl={getExplorerUrl}
-            isAdmin={user?.type === 'admin'}
-            isMobile={isMobile}
-            onChainManagerOpen={handleChainManagerOpen}
-            onSidebarClose={handleSidebarClose}
-          />
-        </Drawer>
-
-        <Content style={{ padding: isMobile ? 12 : 24, backgroundColor: '#f5f5f5' }}>
-          {/* Socket.IO连接错误提示 */}
+        <Stack flex={1} gap="md">
           {wsError && (
-            <Alert
-              type="warning"
-              showIcon
-              icon={<WifiOff className="h-4 w-4 text-orange-500" />}
-              message={
-                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                  <Text type="warning">Socket.IO: {wsError}</Text>
-                  <Space>
-                    <Button 
-                      type="link" 
-                      size="small" 
-                      onClick={handleTestSocket}
-                    >
-                      测试
-                    </Button>
-                    <Button 
-                      type="link" 
-                      size="small" 
-                      onClick={handleReconnectSocket}
-                    >
-                      重连
-                    </Button>
-                  </Space>
-                </Space>
-              }
-              style={{ marginBottom: 16 }}
-            />
+            <Alert color="yellow" title="Socket.IO连接异常" icon={<WifiOff size={16} />}>
+              <Group justify="space-between">
+                <Text size="sm">{wsError}</Text>
+                <Group gap={6}>
+                  <Button size="xs" variant="light" onClick={handleTestSocket}>
+                    测试
+                  </Button>
+                  <Button size="xs" variant="light" onClick={handleReconnectSocket}>
+                    重连
+                  </Button>
+                </Group>
+              </Group>
+            </Alert>
           )}
 
-          {/* 搜索模式提示 */}
           {isSearchMode && (
-            <Alert
-              message={
-                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                  <Text>搜索模式：显示 {searchResults.length} 条搜索结果，实时数据更新已暂停</Text>
-                  <Button 
-                    type="link" 
-                    size="small" 
-                    icon={<ArrowLeft className="h-4 w-4" />}
-                    onClick={exitSearchMode}
-                  >
-                    返回实时模式
-                  </Button>
-                </Space>
-              }
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+            <Alert color="blue" title="搜索模式" icon={<Filter size={16} />}>
+              <Group justify="space-between">
+                <Text size="sm">显示 {searchResults.length} 条搜索结果，实时更新已暂停</Text>
+                <Button size="xs" variant="subtle" leftSection={<ArrowLeft size={14} />} onClick={exitSearchMode}>
+                  返回实时模式
+                </Button>
+              </Group>
+            </Alert>
           )}
 
-          {/* 统计卡片 */}
-          {currentChainProfit && (
-            <ProfitStatistics 
-              profitData={currentChainProfit}
-              isMobile={isMobile}
-            />
-          )}
+          {currentChainProfit && <ProfitStatistics profitData={currentChainProfit} isMobile={Boolean(isMobile)} />}
 
-          {/* 搜索和过滤 */}
-          <Card style={{ marginBottom: 16 }}>
-            {isMobile ? (
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Space.Compact style={{ width: '100%' }}>
-                  <Input
-                    placeholder="关键字搜索"
-                    value={filters.keyword}
-                    onChange={(e) => setFilters({...filters, keyword: e.target.value})}
-                    prefix={<Search className="h-4 w-4" />}
-                    size="small"
-                  />
-                  <Button
-                    icon={<Filter className="h-4 w-4" />}
-                    onClick={() => setFiltersVisible(!filtersVisible)}
-                    size="small"
-                  />
-                </Space.Compact>
-                
-                {filtersVisible && (
-                  <Row gutter={[8, 8]}>
-                    <Col span={12}>
-                      <Input
-                        placeholder="标签"
-                        value={filters.tag}
-                        onChange={(e) => setFilters({...filters, tag: e.target.value})}
-                        size="small"
-                      />
-                    </Col>
-                    <Col span={12}>
-                      <Select
-                        placeholder="排序字段"
-                        value={filters.sort}
-                        onChange={(value) => setFilters({...filters, sort: value})}
-                        size="small"
-                        style={{ width: '100%' }}
-                      >
-                        <Select.Option value="createdAt">时间</Select.Option>
-                        <Select.Option value="income">收益</Select.Option>
-                        <Select.Option value="gross">毛利</Select.Option>
-                        <Select.Option value="bribe">贿赂</Select.Option>
-                        <Select.Option value="ratio">比例</Select.Option>
-                        <Select.Option value="txCount">交易数</Select.Option>
-                      </Select>
-                    </Col>
-                    <Col span={12}>
-                      <Select
-                        placeholder="排序"
-                        value={filters.order}
-                        onChange={(value) => setFilters({...filters, order: value})}
-                        size="small"
-                        style={{ width: '100%' }}
-                      >
-                        <Select.Option value="desc">降序</Select.Option>
-                        <Select.Option value="asc">升序</Select.Option>
-                      </Select>
-                    </Col>
-                    <Col span={12}>
-                      <Button 
-                        type="primary" 
-                        icon={<Search className="h-4 w-4" />}
-                        onClick={searchTrades}
-                        loading={loading}
-                        size="small"
-                        block
-                      >
-                        搜索
-                      </Button>
-                    </Col>
-                  </Row>
-                )}
-              </Space>
-            ) : (
-              <Row gutter={[16, 16]} align="middle">
-                <Col flex="200px">
-                  <Input
-                    placeholder="关键字搜索"
-                    value={filters.keyword}
-                    onChange={(e) => setFilters({...filters, keyword: e.target.value})}
-                    prefix={<Search className="h-4 w-4" />}
-                  />
-                </Col>
-                <Col flex="120px">
-                  <Input
-                    placeholder="标签"
-                    value={filters.tag}
-                    onChange={(e) => setFilters({...filters, tag: e.target.value})}
-                  />
-                </Col>
-                <Col flex="120px">
-                  <Select
-                    placeholder="排序字段"
-                    value={filters.sort}
-                    onChange={(value) => setFilters({...filters, sort: value})}
-                    style={{ width: '100%' }}
-                  >
-                    <Select.Option value="createdAt">时间</Select.Option>
-                    <Select.Option value="income">收益</Select.Option>
-                    <Select.Option value="gross">毛利</Select.Option>
-                    <Select.Option value="bribe">贿赂</Select.Option>
-                    <Select.Option value="ratio">比例</Select.Option>
-                    <Select.Option value="txCount">交易数</Select.Option>
-                  </Select>
-                </Col>
-                <Col flex="100px">
-                  <Select
-                    placeholder="排序"
-                    value={filters.order}
-                    onChange={(value) => setFilters({...filters, order: value})}
-                    style={{ width: '100%' }}
-                  >
-                    <Select.Option value="desc">降序</Select.Option>
-                    <Select.Option value="asc">升序</Select.Option>
-                  </Select>
-                </Col>
-                <Col flex="200px">
-                  <RangePicker 
-                    size="small"
-                    placeholder={['开始日期', '结束日期']}
-                    onChange={(dates) => {
-                      if (dates) {
-                        setFilters({
-                          ...filters,
-                          start: dates[0]?.format('YYYY-MM-DD'),
-                          end: dates[1]?.format('YYYY-MM-DD')
-                        });
-                      } else {
-                        setFilters({
-                          ...filters,
-                          start: undefined,
-                          end: undefined
-                        });
-                      }
-                    }}
-                  />
-                </Col>
-                <Col>
-                  <Button 
-                    type="primary" 
-                    icon={<Search className="h-4 w-4" />}
-                    onClick={searchTrades}
-                    loading={loading}
-                  >
-                    搜索
-                  </Button>
-                </Col>
-              </Row>
-            )}
+          <Card withBorder radius="md">
+            <Stack gap="sm">
+              <Group align="end" wrap="wrap">
+                <TextInput
+                  label="关键字"
+                  placeholder="交易哈希 / 构建者"
+                  leftSection={<Search size={14} />}
+                  value={filters.keyword || ''}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.currentTarget.value }))}
+                />
+                <TextInput
+                  label="标签"
+                  placeholder="例如 Arb"
+                  value={filters.tag || ''}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, tag: e.currentTarget.value }))}
+                />
+                <Select
+                  label="排序字段"
+                  w={120}
+                  value={filters.sort || 'createdAt'}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, sort: value || 'createdAt' }))}
+                  data={[
+                    { value: 'createdAt', label: '时间' },
+                    { value: 'income', label: '收益' },
+                    { value: 'gross', label: '毛利' },
+                    { value: 'bribe', label: '贿赂' },
+                    { value: 'ratio', label: '比例' },
+                    { value: 'txCount', label: '交易数' },
+                  ]}
+                />
+                <Select
+                  label="排序方式"
+                  w={110}
+                  value={filters.order || 'desc'}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, order: (value as 'asc' | 'desc') || 'desc' }))}
+                  data={[
+                    { value: 'desc', label: '降序' },
+                    { value: 'asc', label: '升序' },
+                  ]}
+                />
+                <DatePickerInput
+                  type="range"
+                  label="时间范围"
+                  placeholder="开始日期 - 结束日期"
+                  value={dateRange}
+                  onChange={(value) => {
+                    setDateRange(value as [Date | null, Date | null]);
+                    setFilters((prev) => ({
+                      ...prev,
+                      start: value[0] ? dayjs(value[0]).format('YYYY-MM-DD') : undefined,
+                      end: value[1] ? dayjs(value[1]).format('YYYY-MM-DD') : undefined,
+                    }));
+                  }}
+                />
+                <Button loading={loading} onClick={searchTrades}>
+                  搜索
+                </Button>
+              </Group>
+            </Stack>
           </Card>
 
-          {/* 交易列表 */}
-          <Card>
-            {isMobile ? (
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Space style={{ width: '100%', justifyContent: 'center' }}>
-                  <Text type="secondary">
-                    {isSearchMode ? `搜索结果: ${displayTrades.length} 条` : `共 ${displayTrades.length} 条交易记录`}
+          <Card withBorder radius="md">
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Text size="sm" c="dimmed">
+                  {isSearchMode ? `搜索结果: ${displayTrades.length} 条` : `共 ${displayTrades.length} 条交易记录`}
+                </Text>
+                {!isMobile && (
+                  <Text size="sm" c="dimmed">
+                    第 {page}/{totalPages} 页
                   </Text>
-                </Space>
-                <Space direction="vertical" size="small" style={{ width: '100%', maxHeight: 384, overflowY: 'auto' }}>
-                  {displayTrades.slice(0, 50).map((trade) => (
-                    <MobileTradeCard 
-                      key={trade.id} 
-                      trade={trade} 
+                )}
+              </Group>
+
+              {isMobile ? (
+                <Stack gap="xs">
+                  {paginatedTrades.map((trade) => (
+                    <MobileTradeCard
+                      key={trade.id}
+                      trade={trade}
                       isAdmin={user?.type === 'admin'}
-                      onTradeClick={handleTradeCardClick}
+                      onTradeClick={handleTradeHashClick}
                     />
                   ))}
                   {displayTrades.length > 50 && (
-                    <Space style={{ width: '100%', justifyContent: 'center', padding: '16px 0' }}>
-                      <Text type="secondary">显示前50条记录</Text>
-                    </Space>
+                    <Text size="sm" c="dimmed" ta="center">
+                      仅展示前 50 条记录
+                    </Text>
                   )}
-                </Space>
-              </Space>
-            ) : (
-              <Table
-                columns={tradeColumns}
-                dataSource={displayTrades}
-                rowKey="id"
-                size="small"
-                loading={loading}
-                pagination={{
-                  pageSize: 20,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                  showTotal: (total, range) => 
-                    isSearchMode 
-                      ? `搜索结果: ${range[0]}-${range[1]} 共 ${total} 条`
-                      : `${range[0]}-${range[1]} 共 ${total} 条`,
-                }}
-                scroll={{ x: 800 }}
-              />
-            )}
+                </Stack>
+              ) : (
+                <>
+                  <ScrollArea>
+                    <Table striped highlightOnHover withTableBorder>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>交易数</Table.Th>
+                          <Table.Th>交易类型</Table.Th>
+                          <Table.Th>交易哈希</Table.Th>
+                          <Table.Th>构建者</Table.Th>
+                          <Table.Th>实际收入</Table.Th>
+                          <Table.Th>贿赂</Table.Th>
+                          <Table.Th>比例</Table.Th>
+                          <Table.Th>标签</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {paginatedTrades.map((trade) => (
+                          <Table.Tr key={trade.id}>
+                            <Table.Td>{trade.txCount || 0}</Table.Td>
+                            <Table.Td>
+                              <Badge variant="light">{trade.tags?.[0] || '未知'}</Badge>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text
+                                ff="monospace"
+                                size="xs"
+                                c={user?.type === 'admin' ? 'blue' : 'dimmed'}
+                                style={{ cursor: user?.type === 'admin' ? 'pointer' : 'default' }}
+                                onClick={() => handleTradeHashClick(trade)}
+                              >
+                                {trade.hash.slice(0, 10)}...{trade.hash.slice(-8)}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Badge color="grape" variant="light">
+                                {trade.builder}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text c="blue">${trade.income?.toFixed(4) || '0.0000'}</Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text c="yellow.7">${trade.bribe?.toFixed(4) || '0.0000'}</Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text c="red">{trade.ratio?.toFixed(2) || '0.00'}%</Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Group gap={4}>
+                                {(trade.tags || []).slice(1).map((tag) => (
+                                  <Badge key={tag} variant="outline">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </Group>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </ScrollArea>
+
+                  <Group justify="center" pt="xs">
+                    <Pagination value={page} onChange={setPage} total={totalPages} />
+                  </Group>
+                </>
+              )}
+            </Stack>
           </Card>
-        </Content>
-      </Layout>
+        </Stack>
+      </Group>
 
-      {/* 链配置管理模态框 */}
-      <ChainManager
-        visible={chainManagerVisible}
-        onClose={() => setChainManagerVisible(false)}
-      />
+      <Drawer opened={sidebarVisible} onClose={() => setSidebarVisible(false)} title="菜单" position="left" size="sm">
+        <SidebarContent
+          enabledChains={enabledChains}
+          selectedChain={selectedChain}
+          onChainSelect={setSelectedChain}
+          tokenStats={chainTokenStats[selectedChain] || []}
+          tokenScrollRef={tokenScrollRef}
+          tagStats={currentChainTagStats}
+          getExplorerUrl={getExplorerUrl}
+          isAdmin={user?.type === 'admin'}
+          isMobile
+          onChainManagerOpen={() => setChainManagerVisible(true)}
+          onSidebarClose={() => setSidebarVisible(false)}
+        />
+      </Drawer>
 
-      {/* 交易详情模态框 - 仅admin用户可见 */}
       {user?.type === 'admin' && (
-        <Modal
-          title="交易详情"
-          open={tradeDetailVisible}
-          onCancel={() => setTradeDetailVisible(false)}
-          footer={null}
-          width={isMobile ? '95%' : 800}
+        <Drawer
+          opened={warningDrawerVisible}
+          onClose={() => {
+            setWarningDrawerVisible(false);
+            setSelectedWarningIds([]);
+          }}
+          title={`预警信息 (${warnings.length})`}
+          position="right"
+          size="md"
         >
-          {selectedTrade && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Row gutter={[16, 16]}>
-                <Col span={12}>
-                  <Text strong>链: </Text>
-                  <Tag style={{ backgroundColor: getChainColor(selectedTrade.chain) }}>
-                    {getChainDisplayName(selectedTrade.chain)}
-                  </Tag>
-                </Col>
-                <Col span={12}>
-                  <Text strong>构建者: </Text>
-                  <Text>{selectedTrade.builder}</Text>
-                </Col>
-                <Col span={12}>
-                  <Text strong>交易数量: </Text>
-                  <Text>{selectedTrade.txCount}</Text>
-                </Col>
-
-                <Col span={12}>
-                  <Text strong>实际收入: </Text>
-                  <Text style={{ color: '#1890ff' }}>${selectedTrade.income?.toFixed(4)}</Text>
-                </Col>
-                <Col span={12}>
-                  <Text strong>贿赂: </Text>
-                  <Text style={{ color: '#faad14' }}>${selectedTrade.bribe?.toFixed(4)}</Text>
-                </Col>
-                <Col span={12}>
-                  <Text strong>比例: </Text>
-                  <Text>{selectedTrade.ratio?.toFixed(2)}%</Text>
-                </Col>
-              </Row>
-              
-              <Space>
-                <Text strong>交易哈希: </Text>
-                <Text code style={{ fontSize: 11 }}>
-                  <a 
-                    href={getExplorerUrl(selectedTrade.chain, selectedTrade.hash)} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ color: '#999', fontSize: 11 }}
-                  >
-                    {selectedTrade.hash}
-                  </a>
-                </Text>
-              </Space>
-              
-              {selectedTrade.vicHashes && selectedTrade.vicHashes.length > 0 && (
-                <Space direction="vertical" size="small">
-                  <Text strong>受害者哈希: </Text>
-                  <Space direction="vertical" size="small">
-                    {selectedTrade.vicHashes.map((hash, index) => (
-                      <Text key={index} code style={{ fontSize: 11 }}>
-                        <a 
-                          href={getExplorerUrl(selectedTrade.chain, hash)} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          style={{ color: '#999', fontSize: 11 }}
-                        >
-                          {hash}
-                        </a>
-                      </Text>
-                    ))}
-                  </Space>
-                </Space>
-              )}
-              
-              {selectedTrade.tags && selectedTrade.tags.length > 0 && (
-                <Space direction="vertical" size="small">
-                  <Text strong>标签: </Text>
-                  <Space wrap>
-                    {selectedTrade.tags.map(tag => (
-                      <Tag key={tag}>{tag}</Tag>
-                    ))}
-                  </Space>
-                </Space>
-              )}
-              
-              {selectedTrade.incTokens && selectedTrade.incTokens.length > 0 && (
-                <Space direction="vertical" size="small">
-                  <Text strong>涉及代币: </Text>
-                  <Space wrap>
-                    {selectedTrade.incTokens.map((token, index) => (
-                      <Tag key={index} style={{ padding: '4px 8px' }}>
-                        <Space>
-                          <Text strong style={{ fontSize: 12 }}>{token.symbol}</Text>
-                          <Text style={{ fontSize: 10, color: '#666' }}>
-                            (<a 
-                              href={getExplorerUrl(selectedTrade.chain, token.addr, 'address')} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              style={{ color: '#1890ff' }}
-                            >
-                              {token.addr.slice(0, 6)}...{token.addr.slice(-4)}
-                            </a>)
-                          </Text>
-                        </Space>
-                      </Tag>
-                    ))}
-                  </Space>
-                </Space>
-              )}
-              
-              <Space>
-                <Text strong>创建时间: </Text>
-                <Text>{dayjs(selectedTrade.created_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
-              </Space>
-              
-              {selectedTrade.extraInfo && (
-                <Space direction="vertical" size="small">
-                  <Text strong>套利路径: </Text>
-                  <Card size="small" style={{ backgroundColor: '#f5f5f5' }}>
-                    <Paragraph style={{ 
-                      fontSize: 12, 
-                      fontFamily: 'monospace', 
-                      margin: 0,
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word'
-                    }}>
-                      {selectedTrade.extraInfo}
-                    </Paragraph>
-                  </Card>
-                </Space>
-              )}
-            </Space>
-          )}
-        </Modal>
-      )}
-
-      {/* 预警抽屉 - 仅桌面端admin用户可见 */}
-      {!isMobile && user?.type === 'admin' && (
-        <>
-          <Drawer
-            title={
-              <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                <Text strong>预警信息</Text>
-                {selectedWarningIds.length > 0 && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    已选择 {selectedWarningIds.length} 条
-                  </Text>
-                )}
-              </Space>
-            }
-            placement="right"
-            onClose={() => {
-              setWarningDrawerVisible(false);
-              setSelectedWarningIds([]);
-            }}
-            open={warningDrawerVisible}
-            width={450}
-            extra={
-              <Space>
-                {warnings.length > 0 && (
-                  <Checkbox
-                    indeterminate={selectedWarningIds.length > 0 && selectedWarningIds.length < warnings.length}
-                    checked={selectedWarningIds.length === warnings.length && warnings.length > 0}
-                    onChange={(e) => handleSelectAllWarnings(e.target.checked)}
-                  >
-                    全选
-                  </Checkbox>
-                )}
-                {selectedWarningIds.length > 0 && (
-                  <Popconfirm
-                    title={`确定删除选中的 ${selectedWarningIds.length} 条预警吗？`}
-                    onConfirm={handleBatchDeleteWarnings}
-                    okText="确定"
-                    cancelText="取消"
-                  >
-                    <Button
-                      danger
-                      size="small"
-                      icon={<Trash2 className="h-4 w-4" />}
-                      loading={batchDeleteLoading}
-                    >
-                      批量删除 ({selectedWarningIds.length})
-                    </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            }
-          >
-            <List
-              dataSource={warnings}
-              rowKey="id"
-              renderItem={(warning) => (
-                <List.Item
-                  actions={[
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<Eye className="h-4 w-4" />}
-                      onClick={() => {
-                        setSelectedWarning(warning);
-                        setWarningDetailVisible(true);
-                      }}
-                    >
-                      查看
-                    </Button>,
-                    <Popconfirm
-                      title="确定删除这条预警吗？"
-                      onConfirm={() => handleDeleteWarning(warning.id)}
-                      okText="确定"
-                      cancelText="取消"
-                    >
-                      <Button
-                        type="link"
-                        size="small"
-                        danger
-                        icon={<Trash2 className="h-4 w-4" />}
-                      >
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  ]}
-                >
-                  <Space style={{ width: '100%' }}>
-                    <Checkbox
-                      checked={selectedWarningIds.includes(warning.id)}
-                      onChange={(e) => handleWarningSelect(warning.id, e.target.checked)}
-                    />
-                    <List.Item.Meta
-                      avatar={<AlertTriangle className="h-5 w-5 text-orange-500" />}
-                      title={
-                        <Space>
-                          <Tag color="orange">{warning.type}</Tag>
-                          <Tag style={{ backgroundColor: getChainColor(warning.chain) }}>
-                            {getChainDisplayName(warning.chain)}
-                          </Tag>
-                        </Space>
-                      }
-                      description={
-                        <Space direction="vertical" size="small">
-                          <Text ellipsis style={{ fontSize: 12 }}>
-                            {warning.msg.length > 20 ? `${warning.msg.slice(0, 20)}...` : warning.msg}
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {dayjs(warning.create_at).format('MM-DD HH:mm')}
-                          </Text>
-                        </Space>
-                      }
-                    />
-                  </Space>
-                </List.Item>
-              )}
-            />
-          </Drawer>
-
-          {/* 预警详情模态框 */}
-          <Modal
-            title="预警详情"
-            open={warningDetailVisible}
-            onCancel={() => setWarningDetailVisible(false)}
-            width={isMobile ? '95%' : '66vw'}
-            footer={[
-              <Button key="close" onClick={() => setWarningDetailVisible(false)}>
-                关闭
-              </Button>,
-              <Popconfirm
-                key="delete"
-                title="确定删除这条预警吗？"
-                onConfirm={() => {
-                  if (selectedWarning) {
-                    handleDeleteWarning(selectedWarning.id);
-                    setWarningDetailVisible(false);
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Checkbox
+                label="全选"
+                checked={selectedWarningIds.length === warnings.length && warnings.length > 0}
+                indeterminate={selectedWarningIds.length > 0 && selectedWarningIds.length < warnings.length}
+                onChange={(event) => {
+                  if (event.currentTarget.checked) {
+                    setSelectedWarningIds(warnings.map((w) => w.id));
+                  } else {
+                    setSelectedWarningIds([]);
                   }
                 }}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button danger icon={<Trash2 className="h-4 w-4" />}>
-                  删除预警
+              />
+              {selectedWarningIds.length > 0 && (
+                <Button color="red" variant="light" leftSection={<Trash2 size={14} />} onClick={handleBatchDeleteWarnings}>
+                  批量删除 ({selectedWarningIds.length})
                 </Button>
-              </Popconfirm>
-            ]}
-          >
-            {selectedWarning && (
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Space>
-                  <Text strong>预警类型: </Text>
-                  <Tag color="orange">{selectedWarning.type}</Tag>
-                </Space>
-                <Space>
-                  <Text strong>链: </Text>
-                  <Tag style={{ backgroundColor: getChainColor(selectedWarning.chain) }}>
-                    {getChainDisplayName(selectedWarning.chain)}
-                  </Tag>
-                </Space>
-                <Space>
-                  <Text strong>创建时间: </Text>
-                  <Text>{dayjs(selectedWarning.create_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
-                </Space>
-                <Space direction="vertical" size="small">
-                  <Text strong>预警内容: </Text>
-                  <Card size="small" style={{ backgroundColor: '#f5f5f5' }}>
-                    <Paragraph style={{ 
-                      margin: 0,
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word'
-                    }}>
-                      {selectedWarning.msg}
-                    </Paragraph>
+              )}
+            </Group>
+
+            <Divider />
+
+            <ScrollArea h="calc(100vh - 220px)">
+              <Stack gap="xs">
+                {warnings.map((warning) => (
+                  <Card key={warning.id} withBorder radius="md" p="sm">
+                    <Group justify="space-between" align="flex-start">
+                      <Group align="flex-start" gap="xs" wrap="nowrap">
+                        <Checkbox
+                          checked={selectedWarningIds.includes(warning.id)}
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            setSelectedWarningIds((prev) =>
+                              checked ? [...prev, warning.id] : prev.filter((id) => id !== warning.id)
+                            );
+                          }}
+                        />
+                        <Stack gap={4}>
+                          <Group gap={6}>
+                            <Badge color="yellow" variant="light">
+                              {warning.type}
+                            </Badge>
+                            <Badge style={{ backgroundColor: getChainColor(warning.chain), color: '#fff' }}>
+                              {getChainDisplayName(warning.chain)}
+                            </Badge>
+                          </Group>
+                          <Text size="sm">{warning.msg}</Text>
+                          <Text size="xs" c="dimmed">
+                            {dayjs(warning.create_at).format('MM-DD HH:mm')}
+                          </Text>
+                        </Stack>
+                      </Group>
+                      <Group gap={4}>
+                        <ActionIcon
+                          variant="subtle"
+                          onClick={() => {
+                            setSelectedWarning(warning);
+                            setWarningDetailVisible(true);
+                          }}
+                        >
+                          <Eye size={14} />
+                        </ActionIcon>
+                        <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteWarning(warning.id)}>
+                          <Trash2 size={14} />
+                        </ActionIcon>
+                      </Group>
+                    </Group>
                   </Card>
-                </Space>
-              </Space>
-            )}
-          </Modal>
-        </>
+                ))}
+              </Stack>
+            </ScrollArea>
+          </Stack>
+        </Drawer>
       )}
 
-      {/* 节点状态详情弹窗 */}
+      <Drawer
+        opened={warningDetailVisible}
+        onClose={() => setWarningDetailVisible(false)}
+        title="预警详情"
+        position="right"
+        size="md"
+      >
+        {selectedWarning && (
+          <Stack>
+            <Group>
+              <Text fw={600}>预警类型:</Text>
+              <Badge color="yellow" variant="light">
+                {selectedWarning.type}
+              </Badge>
+            </Group>
+            <Group>
+              <Text fw={600}>链:</Text>
+              <Badge style={{ backgroundColor: getChainColor(selectedWarning.chain), color: '#fff' }}>
+                {getChainDisplayName(selectedWarning.chain)}
+              </Badge>
+            </Group>
+            <Group>
+              <Text fw={600}>创建时间:</Text>
+              <Text size="sm">{dayjs(selectedWarning.create_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
+            </Group>
+            <Card withBorder>
+              <Text>{selectedWarning.msg}</Text>
+            </Card>
+            <Button color="red" leftSection={<Trash2 size={14} />} onClick={() => handleDeleteWarning(selectedWarning.id)}>
+              删除预警
+            </Button>
+          </Stack>
+        )}
+      </Drawer>
+
+      <Drawer opened={tradeDetailVisible} onClose={() => setTradeDetailVisible(false)} title="交易详情" position="right" size="lg">
+        {selectedTrade && (
+          <Stack gap="sm">
+            <Group>
+              <Text fw={600}>链:</Text>
+              <Badge style={{ backgroundColor: getChainColor(selectedTrade.chain), color: '#fff' }}>
+                {getChainDisplayName(selectedTrade.chain)}
+              </Badge>
+            </Group>
+            <Group>
+              <Text fw={600}>构建者:</Text>
+              <Text>{selectedTrade.builder}</Text>
+            </Group>
+            <Group>
+              <Text fw={600}>交易数量:</Text>
+              <Text>{selectedTrade.txCount}</Text>
+            </Group>
+            <Group>
+              <Text fw={600}>净收益:</Text>
+              <Text c="blue">${selectedTrade.income?.toFixed(4)}</Text>
+            </Group>
+            <Group>
+              <Text fw={600}>贿赂:</Text>
+              <Text c="yellow.7">${selectedTrade.bribe?.toFixed(4)}</Text>
+            </Group>
+            <Group>
+              <Text fw={600}>比例:</Text>
+              <Text c="red">{selectedTrade.ratio?.toFixed(2)}%</Text>
+            </Group>
+
+            <Text
+              component="a"
+              href={getExplorerUrl(selectedTrade.chain, selectedTrade.hash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              ff="monospace"
+              size="sm"
+              c="blue"
+            >
+              {selectedTrade.hash}
+            </Text>
+
+            {selectedTrade.vicHashes?.length ? (
+              <Stack gap={4}>
+                <Text fw={600}>受害者哈希</Text>
+                {selectedTrade.vicHashes.map((hash, index) => (
+                  <Text
+                    key={index}
+                    component="a"
+                    href={getExplorerUrl(selectedTrade.chain, hash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    ff="monospace"
+                    size="xs"
+                    c="blue"
+                  >
+                    {hash}
+                  </Text>
+                ))}
+              </Stack>
+            ) : null}
+
+            {selectedTrade.tags?.length ? (
+              <Group gap={4}>
+                {selectedTrade.tags.map((tag) => (
+                  <Badge key={tag} variant="outline">
+                    {tag}
+                  </Badge>
+                ))}
+              </Group>
+            ) : null}
+
+            {selectedTrade.incTokens?.length ? (
+              <Stack gap={4}>
+                <Text fw={600}>涉及代币</Text>
+                <Group gap={4}>
+                  {selectedTrade.incTokens.map((token, index) => (
+                    <Badge key={index} variant="light">
+                      {token.symbol} ({token.addr.slice(0, 6)}...{token.addr.slice(-4)})
+                    </Badge>
+                  ))}
+                </Group>
+              </Stack>
+            ) : null}
+
+            <Group>
+              <Text fw={600}>创建时间:</Text>
+              <Text>{dayjs(selectedTrade.created_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
+            </Group>
+
+            {selectedTrade.extraInfo && (
+              <Card withBorder>
+                <Text ff="monospace" size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {selectedTrade.extraInfo}
+                </Text>
+              </Card>
+            )}
+          </Stack>
+        )}
+      </Drawer>
+
+      <ChainManager visible={chainManagerVisible} onClose={() => setChainManagerVisible(false)} />
       <NodeStatusModal
         visible={nodeStatusModalVisible}
         onClose={() => setNodeStatusModalVisible(false)}
         nodeStatus={nodeStatus}
         loading={nodeStatusLoading}
       />
-    </Layout>
+    </Box>
   );
 };
 
