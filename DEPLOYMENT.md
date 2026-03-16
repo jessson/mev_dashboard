@@ -29,14 +29,14 @@
   - 安装 Node.js 20 与 npm（仅 Debian/Ubuntu 且本机缺失时）
   - 安装前后端 npm 依赖
   - 安装 pm2（若缺失）
-  - 构建前后端
-  - 发布前端静态文件
   - 写入运行配置到 `.env`
   - 配置 `ufw`
   - 不启动服务
 
 - [start.sh](/Users/luffy/project/mev_dashboard/scripts/start.sh)
   - 读取根目录 `.env` 与 `server/.env`
+  - 构建前后端
+  - 发布前端静态文件
   - 使用 PM2 启动或重载：
     - `mev-api`
     - `mev-web`
@@ -120,8 +120,6 @@ ALLOW_API_IPS='1.2.3.4/32,5.6.7.0/24' \
 - 系统依赖安装
 - Node/npm 检查与安装
 - 前后端 npm 依赖安装
-- 前后端构建
-- 前端静态资源发布
 - `.env` 写入
 - `ufw` 配置
 
@@ -133,6 +131,9 @@ ALLOW_API_IPS='1.2.3.4/32,5.6.7.0/24' \
 
 启动脚本会读取刚刚写入的 `.env`，然后通过 PM2 启动：
 
+- 构建前端
+- 构建后端
+- 发布前端静态资源
 - `mev-api`
 - `mev-web`
 
@@ -150,6 +151,8 @@ SKIP_INSTALL=1 ./scripts/deploy.sh
 FRONTEND_DIST_DIR=/var/www/mev_dashboard ./scripts/deploy.sh
 ```
 
+`start.sh` 会把最新构建产物发布到这个目录。
+
 ### 跳过 UFW 配置
 
 ```bash
@@ -159,7 +162,7 @@ CONFIGURE_UFW=0 ./scripts/deploy.sh
 ### 初始化默认用户
 
 ```bash
-RUN_USER_INIT=1 ./scripts/deploy.sh
+RUN_USER_INIT=1 ./scripts/start.sh
 ```
 
 ## Cloudflare 配置

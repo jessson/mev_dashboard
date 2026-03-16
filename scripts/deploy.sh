@@ -212,22 +212,6 @@ configure_firewall() {
     "$ROOT_DIR/scripts/firewall-ufw.sh"
 }
 
-publish_frontend() {
-  if [[ "$SKIP_FRONTEND_DEPLOY" == "1" ]]; then
-    log "跳过前端静态文件发布 (SKIP_FRONTEND_DEPLOY=1)"
-    return 0
-  fi
-
-  log "发布前端静态文件到: $FRONTEND_DIST_DIR"
-  mkdir -p "$FRONTEND_DIST_DIR"
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a --delete "$FRONTEND_DIR/dist/" "$FRONTEND_DIST_DIR/"
-  else
-    rm -rf "${FRONTEND_DIST_DIR:?}/"*
-    cp -R "$FRONTEND_DIR/dist/." "$FRONTEND_DIST_DIR/"
-  fi
-}
-
 write_gateway_env() {
   log "写入网关运行配置: $ROOT_ENV_FILE"
   {
@@ -262,7 +246,7 @@ write_api_env() {
     write_env_line "ALLOWED_ORIGINS" "$ALLOWED_ORIGINS"
     write_env_line "WRITE_API_ALLOWED_ROLES" "$WRITE_API_ALLOWED_ROLES"
     write_env_line "SYNCHRONIZE_DB" "$SYNCHRONIZE_DB"
-    write_env_line "LOG_LEVEL" "$LOG_LEVEL"
+  write_env_line "LOG_LEVEL" "$LOG_LEVEL"
   } > "$API_ENV_FILE"
 }
 
@@ -286,8 +270,6 @@ main() {
   LOG_LEVEL="${LOG_LEVEL:-info}"
   DATABASE_PATH="${DATABASE_PATH:-$BACKEND_DIR/data/mev.db}"
   SKIP_INSTALL="${SKIP_INSTALL:-0}"
-  SKIP_FRONTEND_DEPLOY="${SKIP_FRONTEND_DEPLOY:-0}"
-  RUN_USER_INIT="${RUN_USER_INIT:-0}"
   CONFIGURE_UFW="${CONFIGURE_UFW:-1}"
   ALLOW_API_IPS="${ALLOW_API_IPS:-}"
   SSH_PORT="${SSH_PORT:-22}"
@@ -325,19 +307,6 @@ main() {
   else
     log "跳过依赖安装 (SKIP_INSTALL=1)"
   fi
-
-  log "构建前端 (同源 API 模式)"
-  VITE_API_SAME_ORIGIN=1 npm run build --prefix "$FRONTEND_DIR"
-
-  log "构建后端"
-  npm run build --prefix "$BACKEND_DIR"
-
-  if [[ "$RUN_USER_INIT" == "1" ]]; then
-    log "初始化默认用户"
-    npm run user:init --prefix "$BACKEND_DIR"
-  fi
-
-  publish_frontend
   write_gateway_env
   write_api_env
   configure_firewall

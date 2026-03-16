@@ -27,8 +27,8 @@ mev_dashboard/
 │   ├── src/services/         # 业务服务与 Socket.IO
 │   ├── src/utils/            # 后端工具与安全逻辑
 │   └── scripts/              # 用户、日志、数据相关脚本
-├── scripts/deploy.sh         # 一键部署准备脚本（安装/构建/写入 .env）
-├── scripts/start.sh          # 生产启动脚本（PM2 拉起 mev-api / mev-web）
+├── scripts/deploy.sh         # 一键部署准备脚本（安装依赖/写入 .env）
+├── scripts/start.sh          # 生产启动脚本（build + 发布 + PM2 拉起服务）
 ├── scripts/gateway.mjs       # HTTPS 网关，托管前端并反代 /api 与 /socket.io
 ├── scripts/firewall-ufw.sh   # UFW 规则脚本
 └── DEPLOYMENT.md             # 生产部署说明
@@ -86,8 +86,8 @@ npm run dev
 
 当前工程只有一套正式维护的生产方案：
 
-- `scripts/deploy.sh` 负责安装系统依赖、Node 依赖、构建产物、发布前端并写入 `.env`
-- `scripts/start.sh` 负责启动 `mev-api` 和 `mev-web`
+- `scripts/deploy.sh` 负责安装系统依赖、Node 依赖、pm2、写入 `.env`、配置 `ufw`
+- `scripts/start.sh` 负责构建前后端、发布前端并启动 `mev-api` 和 `mev-web`
 - `mev-web` 使用 Cloudflare Origin Certificate 监听 `8443`
 - `mev-web` 托管前端静态文件，并反代：
   - `/api/*`

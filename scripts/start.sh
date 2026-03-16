@@ -92,6 +92,22 @@ ensure_runtime_dirs() {
   mkdir -p "$BACKEND_DIR/logs"
 }
 
+publish_frontend() {
+  if [[ "$SKIP_FRONTEND_DEPLOY" == "1" ]]; then
+    log "跳过前端静态文件发布 (SKIP_FRONTEND_DEPLOY=1)"
+    return 0
+  fi
+
+  log "发布前端静态文件到: $FRONTEND_DIST_DIR"
+  mkdir -p "$FRONTEND_DIST_DIR"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$ROOT_DIR/dist/" "$FRONTEND_DIST_DIR/"
+  else
+    rm -rf "${FRONTEND_DIST_DIR:?}/"*
+    cp -R "$ROOT_DIR/dist/." "$FRONTEND_DIST_DIR/"
+  fi
+}
+
 cleanup_legacy_pm2() {
   if pm2 describe "$LEGACY_PM2_NAME" >/dev/null 2>&1; then
     log "清理旧版直出进程: $LEGACY_PM2_NAME"
@@ -211,6 +227,8 @@ main() {
   SYNCHRONIZE_DB="${SYNCHRONIZE_DB:-0}"
   LOG_LEVEL="${LOG_LEVEL:-info}"
   DATABASE_PATH="${DATABASE_PATH:-$BACKEND_DIR/data/mev.db}"
+  SKIP_FRONTEND_DEPLOY="${SKIP_FRONTEND_DEPLOY:-0}"
+  RUN_USER_INIT="${RUN_USER_INIT:-0}"
   PM2_API_NAME="${PM2_API_NAME:-mev-api}"
   PM2_WEB_NAME="${PM2_WEB_NAME:-mev-web}"
   LEGACY_PM2_NAME="${LEGACY_PM2_NAME:-mev-server}"
@@ -223,12 +241,25 @@ main() {
   need_cmd curl
   ensure_pm2
   ensure_runtime_dirs
-  ensure_files_ready
 
-  log "开始启动服务"
+  log "开始构建并启动服务"
   log "前端监听: ${WEB_HOST}:${WEB_PORT} (HTTPS)"
   log "后端监听: ${API_HOST}:${API_PORT} (HTTP)"
   log "前端网关反代目标: ${API_PROXY_HOST}:${API_PORT}"
+
+  log "构建前端 (同源 API 模式)"
+  VITE_API_SAME_ORIGIN=1 npm run build --prefix "$ROOT_DIR"
+
+  log "构建后端"
+  npm run build --prefix "$BACKEND_DIR"
+
+  if [[ "$RUN_USER_INIT" == "1" ]]; then
+    log "初始化默认用户"
+    npm run user:init --prefix "$BACKEND_DIR"
+  fi
+
+  publish_frontend
+  ensure_files_ready
 
   cleanup_legacy_pm2
   start_api
