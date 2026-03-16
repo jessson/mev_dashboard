@@ -112,6 +112,9 @@ start_api() {
       SYNCHRONIZE_DB="$SYNCHRONIZE_DB" \
       LOG_LEVEL="$LOG_LEVEL" \
       DATABASE_PATH="$DATABASE_PATH" \
+      ENABLE_HTTPS="0" \
+      SSL_CERT_PATH="" \
+      SSL_KEY_PATH="" \
       pm2 restart "$PM2_API_NAME" --update-env
   else
     env \
@@ -124,6 +127,9 @@ start_api() {
       SYNCHRONIZE_DB="$SYNCHRONIZE_DB" \
       LOG_LEVEL="$LOG_LEVEL" \
       DATABASE_PATH="$DATABASE_PATH" \
+      ENABLE_HTTPS="0" \
+      SSL_CERT_PATH="" \
+      SSL_KEY_PATH="" \
       pm2 start "$BACKEND_DIR/dist/index.js" \
       --name "$PM2_API_NAME" \
       --cwd "$BACKEND_DIR" \
