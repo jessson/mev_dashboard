@@ -35,7 +35,7 @@ export async function warningRoutes(fastify: FastifyInstance) {
 
   // 创建预警（推送端点）- 需要认证但限流更宽松
   fastify.post('/warning', {
-    preHandler: [(fastify as any).authenticate],
+    preHandler: [(fastify as any).requireWriteAccess],
     schema: {
       body: {
         type: 'object',
@@ -57,9 +57,6 @@ export async function warningRoutes(fastify: FastifyInstance) {
     Body: { type: string; msg: string; chain: string } 
   }>, reply: FastifyReply) => {
     try {
-      const user = (request as any).user;
-
-
       let { type, msg, chain } = request.body;
       chain = chain.toUpperCase();
       const warning = await warningService.createWarning(type, msg, chain);

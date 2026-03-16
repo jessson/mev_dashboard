@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import compress from '@fastify/compress';
+import { getAllowedOrigins, getJwtSecret, isOriginAllowed, isWriteRoleAllowed } from '../utils/security';
 
 export async function registerPlugins(fastify: FastifyInstance<any>) {
   // 安全相关 - 先注册helmet但配置更宽松
@@ -18,47 +19,14 @@ export async function registerPlugins(fastify: FastifyInstance<any>) {
   // CORS - 支持生产环境的配置
   await fastify.register(cors, {
     origin: (origin, callback) => {
-      // 基础允许的域名
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:3000',
-        'http://localhost:4173', // Vite preview
-        'http://127.0.0.1:4173'
-      ];
-
-      // 从环境变量获取生产域名
-      const productionDomains = process.env.ALLOWED_ORIGINS?.split(',') || [];
-      allowedOrigins.push(...productionDomains);
-
-      // 开发环境允许所有来源
-      if (process.env.NODE_ENV === 'development') {
-        callback(null, true);
-        return;
-      }
-      
-      // 没有origin的请求（如Postman、服务器间调用）也允许
-      if (!origin) {
+      if (isOriginAllowed(origin)) {
         callback(null, true);
         return;
       }
 
-      // 生产环境：如果没有配置ALLOWED_ORIGINS，则允许所有HTTPS请求
-      if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS) {
-        if (origin.startsWith('https://') || origin.startsWith('http://')) {
-          callback(null, true);
-          return;
-        }
-      }
-      
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log(`❌ CORS拒绝来源: ${origin}`);
-        console.log(`✅ 允许的来源: ${allowedOrigins.join(', ')}`);
-        callback(new Error('Not allowed by CORS'), false);
-      }
+      console.log(`❌ CORS拒绝来源: ${origin}`);
+      console.log(`✅ 允许的来源: ${getAllowedOrigins().join(', ')}`);
+      callback(new Error('Not allowed by CORS'), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -112,7 +80,7 @@ export async function registerPlugins(fastify: FastifyInstance<any>) {
 
   // JWT
   await fastify.register(jwt, {
-    secret: process.env.JWT_SECRET || 'your-secret-key',
+    secret: getJwtSecret(),
     sign: {
       expiresIn: '7d'
     }
@@ -158,20 +126,20 @@ export async function registerPlugins(fastify: FastifyInstance<any>) {
     try {
       await request.jwtVerify();
     } catch (err) {
-      reply.code(401).send({ error: '未授权访问' });
+      return reply.code(401).send({ error: '未授权访问' });
     }
   });
 
-  // 添加预检请求处理
-  fastify.addHook('onRequest', async (request, reply) => {
-    if (request.method === 'OPTIONS') {
-      reply
-        .header('Access-Control-Allow-Origin', request.headers.origin || '*')
-        .header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        .header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-        .header('Access-Control-Allow-Credentials', 'true')
-        .code(200)
-        .send();
+  fastify.decorate('requireWriteAccess', async function(request: any, reply: any) {
+    try {
+      await request.jwtVerify();
+      const role = request.user?.type;
+
+      if (!isWriteRoleAllowed(role)) {
+        return reply.code(403).send({ error: '权限不足' });
+      }
+    } catch (err) {
+      return reply.code(401).send({ error: '未授权访问' });
     }
   });
 }

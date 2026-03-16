@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from '../utils/logger';
+import { getAllowedOrigins, isOriginAllowed } from '../utils/security';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -15,7 +16,15 @@ export class WebSocketService {
     // 优化的Socket.IO服务器配置 - 提高部署环境稳定性
     this.io = new SocketIOServer(this.fastify.server, {
       cors: {
-        origin: true, // 允许所有来源
+        origin: (origin, callback) => {
+          if (isOriginAllowed(origin)) {
+            callback(null, true);
+            return;
+          }
+
+          logger.warn(`Socket.IO CORS拒绝来源: ${origin}，允许来源: ${getAllowedOrigins().join(', ')}`);
+          callback(new Error('Not allowed by Socket.IO CORS'));
+        },
         methods: ['GET', 'POST'],
         credentials: true
       },
@@ -38,6 +47,8 @@ export class WebSocketService {
       const clientId = socket.id;
       let user = null;
       let isAuthenticated = false;
+      const requestedPage = String(socket.handshake.query?.page || '').toLowerCase();
+      const isWelcomeClient = requestedPage === 'welcome';
 
       // 尝试验证JWT token
       try {
@@ -51,11 +62,19 @@ export class WebSocketService {
           user = decoded;
           isAuthenticated = true;
           logger.info(`Socket.IO认证用户连接: ${user?.username} (${user?.type}) [${clientId}]`);
+        } else if (!isWelcomeClient) {
+          logger.warn(`Socket.IO拒绝未认证连接: [${clientId}]`);
+          socket.emit('error', { message: '需要登录才能建立实时连接' });
+          socket.disconnect(true);
+          return;
         } else {
-          logger.info(`Socket.IO未认证用户连接: [${clientId}]`);
+          logger.info(`Socket.IO欢迎页连接: [${clientId}]`);
         }
       } catch (jwtError: any) {
         logger.warn(`Socket.IO JWT验证失败: [${clientId}] - ${jwtError?.message || 'unknown error'}`);
+        socket.emit('error', { message: 'Socket.IO认证失败' });
+        socket.disconnect(true);
+        return;
       }
       
       const clientInfo = {
@@ -182,7 +201,7 @@ export class WebSocketService {
     logger.info(`Socket.IO服务初始化完成`);
     logger.info(`Socket.IO路径: /socket.io`);
     logger.info(`Socket.IO传输: polling + websocket (部署环境优化)`);
-    logger.info(`CORS允许来源: 所有来源`);
+      logger.info(`CORS允许来源: ${getAllowedOrigins().join(', ') || '仅同源/无Origin请求'}`);
     logger.info(`心跳间隔: 25秒, 超时: 60秒`);
   }
 

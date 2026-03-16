@@ -12,6 +12,7 @@ import { cacheService } from './services/cache.service';
 import { chainService } from './config/chains';
 import { ChainConfig as ChainConfigEntity } from './entities/ChainConfig';
 import { logger } from './utils/logger';
+import { shouldSynchronizeDatabase } from './utils/security';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -107,8 +108,12 @@ async function start() {
       await TypeormConnection.initialize();
       logger.info(`数据库连接成功`);
       
-      // 强制同步数据库表结构
-      await TypeormConnection.synchronize();
+      if (shouldSynchronizeDatabase()) {
+        logger.warn(`数据库自动同步已启用，请仅在开发或确认安全时使用`);
+        await TypeormConnection.synchronize();
+      } else {
+        logger.info(`生产模式下已禁用自动数据库同步`);
+      }
 
       // 初始化链配置服务
       const chainConfigRepository = TypeormConnection.getRepository(ChainConfigEntity);
@@ -130,10 +135,10 @@ async function start() {
     }
 
     // 注册插件
-    await registerPlugins(fastify);
+    await registerPlugins(fastify as any);
     
     // 注册路由
-    await registerRoutes(fastify);
+    await registerRoutes(fastify as any);
 
     // 在开发环境下打印路由信息
     if (process.env.NODE_ENV === 'development') {
@@ -141,7 +146,7 @@ async function start() {
     }
 
     // 初始化WebSocket服务
-    const wsService = new WebSocketService(fastify);
+    const wsService = new WebSocketService(fastify as any);
     await wsService.initialize();
     
     // 将WebSocket服务实例附加到fastify实例，供路由使用

@@ -83,7 +83,7 @@ export default async function nodeRoutes(fastify: FastifyInstance) {
 
   // 更新节点状态 - 需要认证
   fastify.post('/node/status/:chain', {
-    preHandler: [(fastify as any).authenticate]
+    preHandler: [(fastify as any).requireWriteAccess]
   }, async (request: FastifyRequest<{
     Params: { chain: string };
     Body: NodeStatusUpdateRequest;
@@ -150,7 +150,7 @@ export default async function nodeRoutes(fastify: FastifyInstance) {
 
   // 标记节点离线 - 需要认证
   fastify.post('/node/offline/:chain', {
-    preHandler: [(fastify as any).authenticate]
+    preHandler: [(fastify as any).requireWriteAccess]
   }, async (request: FastifyRequest<{
     Params: { chain: string }
   }>, reply: FastifyReply) => {

@@ -1,323 +1,220 @@
-# 部署配置说明
+# 部署说明
 
-## 一键部署（推荐）
+本文档只描述当前仓库实际使用的部署方式。
 
-项目根目录脚本：`scripts/deploy.sh`
+## 当前部署拓扑
 
-这个脚本现在默认采用下面这套结构：
+生产环境使用两个 Node 进程：
 
-- 前端网关 `mev-web`：使用 Cloudflare Origin Certificate，监听 `8443`
-- 后端 API `mev-api`：仅监听 `127.0.0.1:3000`
-- 前端构建为同源模式，浏览器请求 `/api/*` 和 `/socket.io/*` 时由 `scripts/gateway.mjs` 反代到后端
+1. `mev-api`
+   - 运行后端 Fastify 服务
+   - 默认监听 `0.0.0.0:3000`
+   - 允许外部访问，但依赖 `ufw` 规则限制来源 IP
 
-### 最常用命令
+2. `mev-web`
+   - 运行 [gateway.mjs](/Users/luffy/project/mev_dashboard/scripts/gateway.mjs)
+   - 使用 Cloudflare Origin Certificate 提供 HTTPS
+   - 默认监听 `8443`
+   - 托管前端 `dist`
+   - 反代：
+     - `/api/*`
+     - `/socket.io/*`
 
-```bash
-# 首次部署：安装依赖 + 构建 + 启动前后端 + 健康检查
-SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
-SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-JWT_SECRET='replace-with-a-strong-secret' \
-./scripts/deploy.sh
+## 一键部署脚本
 
-# 跳过依赖安装
-SKIP_INSTALL=1 \
-SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
-SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-JWT_SECRET='replace-with-a-strong-secret' \
-./scripts/deploy.sh
+入口脚本：
 
-# 自定义前端静态目录
-FRONTEND_DIST_DIR=/var/www/mev_dashboard \
-SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
-SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-JWT_SECRET='replace-with-a-strong-secret' \
-./scripts/deploy.sh
-```
+- [deploy.sh](/Users/luffy/project/mev_dashboard/scripts/deploy.sh)
 
-### 默认端口
+脚本会做这些事情：
 
-- Web: `8443`
-- API: `127.0.0.1:3000`
-
-### 脚本行为
-
-1. 安装前后端依赖（默认）
-2. 以前后端同源模式构建前端：`VITE_API_SAME_ORIGIN=1`
-3. 构建后端
-4. 将前端 `dist` 发布到 `FRONTEND_DIST_DIR`
-5. 启动或重载两个进程：
+1. 检查并安装依赖
+2. 如果系统没有 `pm2`，自动安装 `pm2`
+3. 构建前端
+4. 构建后端
+5. 发布前端静态资源到 `FRONTEND_DIST_DIR`
+6. 启动或重载：
    - `mev-api`
    - `mev-web`
-6. 自动检查：
-   - `http://127.0.0.1:3000/api/health`
-   - `https://127.0.0.1:8443/api/health`
+7. 如果系统没有 `ufw`，尝试自动安装
+8. 配置防火墙：
+   - 放行 `22/tcp`
+   - 放行 `8443/tcp`
+   - `3000/tcp` 仅允许你指定的 `ALLOW_API_IPS`
+9. 执行健康检查
 
-## Cloudflare SSL 证书
+## 默认端口
 
-如果你要使用 Cloudflare SSL，请使用 **Cloudflare Origin Certificate**（不是 Edge 证书）。
+- Web HTTPS: `8443`
+- API: `3000`
+- SSH: `22`
 
-### 1. 生成 Origin Certificate
-1. 登录 Cloudflare 控制台
-2. 进入 `SSL/TLS` -> `Origin Server`
-3. 点击 `Create Certificate`
-4. 将证书和私钥保存到服务器，例如：
-   - `/etc/ssl/certs/cf-origin.pem`
-   - `/etc/ssl/private/cf-origin.key`
+## 必需输入
 
-### 2. 启动方式
+部署时至少需要准备：
+
+- Cloudflare Origin Certificate `.pem`
+- Cloudflare Origin Key `.key`
+- 强随机 `JWT_SECRET`
+- 允许访问 `3000` 的白名单 IP 或 CIDR
+
+如果你不通过环境变量传入：
+
+- `SSL_CERT_PATH`
+- `SSL_KEY_PATH`
+- `ALLOW_API_IPS`
+
+脚本会在执行时交互提示输入。
+
+## 推荐部署命令
+
+```bash
+JWT_SECRET='replace-with-a-strong-secret' \
+ALLOW_API_IPS='1.2.3.4/32,5.6.7.0/24' \
+./scripts/deploy.sh
+```
+
+如果你想显式提供证书路径：
 
 ```bash
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
 JWT_SECRET='replace-with-a-strong-secret' \
+ALLOW_API_IPS='1.2.3.4/32,5.6.7.0/24' \
 ./scripts/deploy.sh
 ```
 
-## 当前推荐部署拓扑
+跳过依赖安装：
 
-不使用 Nginx 时，推荐直接用项目自带的 Node 网关：
+```bash
+SKIP_INSTALL=1 \
+JWT_SECRET='replace-with-a-strong-secret' \
+ALLOW_API_IPS='1.2.3.4/32' \
+./scripts/deploy.sh
+```
 
-- `scripts/gateway.mjs` 负责 HTTPS + 静态文件 + `/api/*` 和 `/socket.io/*` 反代
-- `server/dist/index.js` 只跑 API 服务
+自定义前端发布目录：
 
-对应关系：
+```bash
+FRONTEND_DIST_DIR=/var/www/mev_dashboard \
+JWT_SECRET='replace-with-a-strong-secret' \
+ALLOW_API_IPS='1.2.3.4/32' \
+./scripts/deploy.sh
+```
 
-- 外部访问：`https://your-domain.com:8443`
-- 内部 API：`http://127.0.0.1:3000`
+## Cloudflare 配置
 
-`scripts/deploy.sh` 已经会自动按这套方式启动，不需要再手动分别执行两个命令。
+请使用 Cloudflare 的 Origin Certificate，而不是浏览器侧证书。
 
-### 3. Cloudflare 模式
-在 Cloudflare 中将 SSL 模式设置为 `Full (strict)`。
+推荐设置：
 
-### 4. 后端环境变量
+- SSL/TLS 模式：`Full (strict)`
+- 域名指向你的服务器
+- 访问地址：`https://your-domain:8443`
 
-推荐至少配置：
+## 前端构建方式
+
+部署脚本会自动使用：
+
+```bash
+VITE_API_SAME_ORIGIN=1
+```
+
+这意味着前端不会直接请求 `https://domain:3000`，而是通过 `8443` 上的网关同源访问：
+
+- `https://your-domain:8443/api/...`
+- `https://your-domain:8443/socket.io/...`
+
+## 防火墙说明
+
+部署脚本内部调用：
+
+- [firewall-ufw.sh](/Users/luffy/project/mev_dashboard/scripts/firewall-ufw.sh)
+
+执行结果目标是：
+
+- `22/tcp` 开放
+- `8443/tcp` 开放
+- `3000/tcp` 仅允许：
+  - `ALLOW_API_IPS` 指定的外部地址
+
+如果你不想让脚本配置 `ufw`：
+
+```bash
+CONFIGURE_UFW=0 \
+JWT_SECRET='replace-with-a-strong-secret' \
+ALLOW_API_IPS='1.2.3.4/32' \
+./scripts/deploy.sh
+```
+
+## 关键环境变量
+
+### 部署脚本
 
 - `JWT_SECRET`
+- `ALLOW_API_IPS`
+- `SSL_CERT_PATH`
+- `SSL_KEY_PATH`
+- `FRONTEND_DIST_DIR`
+- `WEB_HOST`
+- `WEB_PORT`
+- `API_HOST`
+- `API_PORT`
+- `API_PROXY_HOST`
+- `SSH_PORT`
+- `CONFIGURE_UFW`
+- `SKIP_INSTALL`
+
+### 后端
+
+- `PORT`
+- `HOST`
+- `JWT_SECRET`
+- `ALLOWED_ORIGINS`
+- `WRITE_API_ALLOWED_ROLES`
+- `SYNCHRONIZE_DB`
 - `DATABASE_PATH`
 - `LOG_LEVEL`
-- `ALLOWED_ORIGINS`（如果你后续要单独开放 API 域名）
 
-## API 地址配置
+当前脚本默认传入：
 
-### 方案一：使用环境变量（推荐）
+- `WRITE_API_ALLOWED_ROLES=admin`
+- `SYNCHRONIZE_DB=0`
 
-#### 1. 创建环境变量文件
+## 首次部署后需要做的事
 
-在项目根目录创建 `.env.local` 文件：
+### 1. 创建管理员用户
 
-```bash
-# 开发环境
-VITE_API_BASE_URL=http://localhost:3000
-
-# 测试环境
-# VITE_API_BASE_URL=http://test-server:3000
-
-# 生产环境
-# VITE_API_BASE_URL=https://your-domain.com:3000
-# 或者如果 API 服务器在 80/443 端口：
-# VITE_API_BASE_URL=https://your-domain.com
-```
-
-#### 2. 不同环境的配置示例
-
-**开发环境：**
-```bash
-VITE_API_BASE_URL=http://localhost:3000
-```
-
-**部署到服务器（API 在3000端口）：**
-```bash
-VITE_API_BASE_URL=http://your-server-ip:3000
-# 或者使用域名
-VITE_API_BASE_URL=https://your-domain.com:3000
-```
-
-**API 和前端在同一服务器的不同端口：**
-```bash
-VITE_API_BASE_URL=http://your-server-ip:3000
-```
-
-**使用 Nginx 反向代理（推荐）：**
-```bash
-VITE_API_BASE_URL=https://your-domain.com/api
-```
-
-### 方案二：动态配置（自动）
-
-如果不设置环境变量，系统会自动：
-
-1. **开发环境**：使用 `http://localhost:3000`
-2. **生产环境**：使用当前域名 + `:3000` 端口
-
-例如：
-- 访问地址：`https://example.com`
-- API 地址：`https://example.com:3000`
-
-## 部署场景
-
-### 场景1：前后端同服务器，浏览器只访问 8443
-
-- 前端：`https://your-server:8443`
-- 后端：`http://127.0.0.1:3000`
-
-配置：
-```bash
-SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
-SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-JWT_SECRET='replace-with-a-strong-secret' \
-./scripts/deploy.sh
-```
-
-### 场景2：使用 Nginx 反向代理（推荐）
-
-Nginx 配置示例：
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # 前端静态文件
-    location / {
-        root /path/to/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # API 代理
-    location /api/ {
-        proxy_pass http://localhost:3000/api/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # WebSocket 代理
-    location /socket.io/ {
-        proxy_pass http://localhost:3000/socket.io/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-前端配置：
-```bash
-VITE_API_BASE_URL=https://your-domain.com
-```
-
-### 场景3：Docker 部署
-
-Docker Compose 示例：
-```yaml
-version: '3.8'
-services:
-  frontend:
-    build: .
-    ports:
-      - "80:80"
-    environment:
-      - VITE_API_BASE_URL=http://backend:3000
-    depends_on:
-      - backend
-
-  backend:
-    build: ./server
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-```
-
-### 场景4：云服务部署
-
-如果使用云服务（如 AWS、阿里云等），可以：
-
-1. **内网通信**：
-```bash
-VITE_API_BASE_URL=http://内网IP:3000
-```
-
-2. **公网访问**：
-```bash
-VITE_API_BASE_URL=https://api.your-domain.com
-```
-
-## 构建和部署
-
-### 1. 构建前端
+后端不会自动创建默认管理员。
 
 ```bash
-# 设置环境变量后构建
-npm run build
+cd server
+npx tsx scripts/user-manager.ts create admin your-password admin
 ```
 
-### 2. 部署步骤
-
-1. 将构建好的 `dist` 目录上传到服务器
-2. 配置 Web 服务器（Nginx/Apache）
-3. 确保 API 服务器正在运行
-4. 测试前后端连接
-
-### 3. 验证部署
-
-访问以下地址验证：
-- 前端页面：`http://your-domain.com`
-- API 健康检查：`http://your-domain.com:3000/health`
-- WebSocket 连接：检查浏览器控制台是否有连接成功日志
-
-## 常见问题
-
-### 1. CORS 跨域问题
-
-如果遇到跨域问题，检查后端 CORS 配置：
-
-```typescript
-// server/src/config/plugins.ts
-await fastify.register(cors, {
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:4173',
-    'https://your-domain.com',  // 添加你的域名
-    // 或者使用动态配置
-    /^https?:\/\/.*\.your-domain\.com$/
-  ],
-  credentials: true
-});
-```
-
-### 2. WebSocket 连接失败
+### 2. 验证服务
 
 检查：
-1. 防火墙是否开放相应端口
-2. WebSocket 代理配置是否正确
-3. 浏览器控制台的错误信息
 
-### 3. API 请求失败
+```bash
+curl http://127.0.0.1:3000/api/health
+curl -k https://127.0.0.1:8443/api/health
+pm2 list
+sudo ufw status verbose
+```
 
-检查：
-1. API 服务器是否正在运行
-2. 端口是否正确
-3. 防火墙设置
-4. 网络连接
+### 3. 验证外部访问
 
-## 推荐配置
+- 浏览器访问：`https://your-domain:8443`
+- 白名单机器访问：`http://your-server:3000/api/health`
+- 非白名单机器访问 `3000` 应被 `ufw` 拒绝
 
-**生产环境推荐使用 Nginx 反向代理方案**：
+## 说明
 
-优点：
-- 统一域名，避免跨域问题
-- 更好的安全性
-- 负载均衡和缓存能力
-- SSL 终止
+当前工程实际维护的生产入口只有：
 
-配置文件位置：
-- 环境变量：`.env.local`
-- Nginx 配置：`/etc/nginx/sites-available/your-site`
-- 后端配置：`server/src/config/` 
+- [deploy.sh](/Users/luffy/project/mev_dashboard/scripts/deploy.sh)
+- [gateway.mjs](/Users/luffy/project/mev_dashboard/scripts/gateway.mjs)
+- [firewall-ufw.sh](/Users/luffy/project/mev_dashboard/scripts/firewall-ufw.sh)
+
+如果后续新增新的官方部署方式，再单独补充文档。

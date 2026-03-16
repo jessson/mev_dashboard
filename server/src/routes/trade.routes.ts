@@ -90,7 +90,7 @@ export async function tradeRoutes(fastify: FastifyInstance) {
 
   // 创建交易（推送端点）- 需要认证但限流更宽松
   fastify.post('/trade', {
-    preHandler: [(fastify as any).authenticate],
+    preHandler: [(fastify as any).requireWriteAccess],
     schema: {
       body: {
         type: 'object',
