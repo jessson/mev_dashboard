@@ -5,8 +5,8 @@ import {
   Button,
   Card,
   Divider,
-  Drawer,
   Group,
+  Modal,
   Pagination,
   ScrollArea,
   Select,
@@ -385,9 +385,11 @@ const TradesPage = () => {
         </Stack>
       </Card>
 
-      <Drawer
+      <Modal
         opened={tradeDetailVisible}
         onClose={() => setTradeDetailVisible(false)}
+        centered
+        classNames={{ content: 'center-modal' }}
         title={
           <Group gap="xs">
             <ThemeIcon color="brand" variant="light" radius="xl" size="lg">
@@ -401,11 +403,10 @@ const TradesPage = () => {
             </div>
           </Group>
         }
-        position="right"
-        size="xl"
+        size="min(1100px, 92vw)"
       >
         {selectedTrade && (
-          <ScrollArea className="detail-panel" h="calc(100vh - 96px)">
+          <ScrollArea className="detail-panel" h="min(72vh, 900px)">
             <Stack gap="lg">
               <div className="detail-summary-card">
                 <Group justify="space-between" align="flex-start" mb="md">
@@ -535,7 +536,7 @@ const TradesPage = () => {
             </Stack>
           </ScrollArea>
         )}
-      </Drawer>
+      </Modal>
     </Stack>
   );
 };

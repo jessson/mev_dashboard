@@ -243,6 +243,17 @@ button.status-pill {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
+.sidebar-mini-title {
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-mini-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .metric-kicker {
   color: var(--text-muted);
   font-size: 0.76rem;
@@ -420,6 +431,17 @@ button.status-pill {
 
 .detail-panel {
   padding-right: 4px;
+}
+
+.center-modal .mantine-Modal-content {
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.16);
+}
+
+.center-modal .mantine-Modal-header {
+  background: transparent;
 }
 
 .detail-summary-card {

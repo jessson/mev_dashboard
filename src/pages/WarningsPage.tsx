@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActionIcon, Badge, Button, Card, Checkbox, Divider, Drawer, Group, ScrollArea, Stack, Text, Title } from '@mantine/core';
+import { ActionIcon, Badge, Button, Card, Checkbox, Divider, Group, Modal, ScrollArea, Stack, Text, Title } from '@mantine/core';
 import { Eye, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useDashboard } from '../context/DashboardContext';
@@ -111,41 +111,52 @@ const WarningsPage = () => {
         </Card>
       </Stack>
 
-      <Drawer opened={warningDetailVisible} onClose={() => setWarningDetailVisible(false)} title="预警详情" position="right" size="md">
+      <Modal
+        opened={warningDetailVisible}
+        onClose={() => setWarningDetailVisible(false)}
+        title="预警详情"
+        centered
+        size="min(860px, 92vw)"
+        classNames={{ content: 'center-modal' }}
+      >
         {selectedWarning && (
-          <Stack>
-            <Group>
-              <Text fw={600}>预警类型:</Text>
-              <Badge color="yellow" variant="light">
-                {selectedWarning.type}
-              </Badge>
-            </Group>
-            <Group>
-              <Text fw={600}>链:</Text>
-              <Badge style={{ backgroundColor: getChainColor(selectedWarning.chain), color: '#fff' }}>
-                {getChainDisplayName(selectedWarning.chain)}
-              </Badge>
-            </Group>
-            <Group>
-              <Text fw={600}>创建时间:</Text>
-              <Text size="sm">{dayjs(selectedWarning.create_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
-            </Group>
-            <Card withBorder>
-              <Text>{selectedWarning.msg}</Text>
-            </Card>
-            <Button
-              color="red"
-              leftSection={<Trash2 size={14} />}
-              onClick={async () => {
-                await deleteWarning(selectedWarning.id);
-                setWarningDetailVisible(false);
-              }}
-            >
-              删除预警
-            </Button>
-          </Stack>
+          <ScrollArea h="min(70vh, 820px)">
+            <Stack gap="md">
+              <Group>
+                <Text fw={600}>预警类型:</Text>
+                <Badge color="yellow" variant="light">
+                  {selectedWarning.type}
+                </Badge>
+              </Group>
+              <Group>
+                <Text fw={600}>链:</Text>
+                <Badge style={{ backgroundColor: getChainColor(selectedWarning.chain), color: '#fff' }}>
+                  {getChainDisplayName(selectedWarning.chain)}
+                </Badge>
+              </Group>
+              <Group>
+                <Text fw={600}>创建时间:</Text>
+                <Text size="sm">{dayjs(selectedWarning.create_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
+              </Group>
+              <Card withBorder p="md">
+                <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7 }}>
+                  {selectedWarning.msg}
+                </Text>
+              </Card>
+              <Button
+                color="red"
+                leftSection={<Trash2 size={14} />}
+                onClick={async () => {
+                  await deleteWarning(selectedWarning.id);
+                  setWarningDetailVisible(false);
+                }}
+              >
+                删除预警
+              </Button>
+            </Stack>
+          </ScrollArea>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 };

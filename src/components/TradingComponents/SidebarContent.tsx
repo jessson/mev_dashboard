@@ -130,7 +130,7 @@ const SidebarContent: React.FC<SidebarContentProps> = React.memo(
                       <Group justify="space-between" align="flex-start" wrap="nowrap">
                         <Stack gap={5}>
                           <Group gap={8}>
-                            <Text fw={800}>{token.symbol}</Text>
+                            <Text className="sidebar-mini-title">{token.symbol}</Text>
                             <Badge variant="filled" color="brand.1" c="brand.7">
                               #{idx + 1}
                             </Badge>
@@ -154,10 +154,10 @@ const SidebarContent: React.FC<SidebarContentProps> = React.memo(
                         </Stack>
 
                         <Stack gap={2} align="flex-end">
-                          <Text fw={800} c="brand.6">
+                          <Text size="sm" fw={800} c="brand.6">
                             ${token.totalProfit.toFixed(2)}
                           </Text>
-                          <Text size="xs" c="dimmed">
+                          <Text className="sidebar-mini-meta">
                             {token.count} 次命中
                           </Text>
                         </Stack>
@@ -192,16 +192,16 @@ const SidebarContent: React.FC<SidebarContentProps> = React.memo(
                     <Card key={`${tagStat.chain}-${tagStat.tag}`} radius="lg" p="sm" bg="rgba(255,255,255,0.72)">
                       <Group justify="space-between" align="flex-start" wrap="nowrap">
                         <Stack gap={3}>
-                          <Text fw={800}>{tagStat.tag || '未知标签'}</Text>
-                          <Text size="xs" c="dimmed">
+                          <Text className="sidebar-mini-title">{tagStat.tag || '未知标签'}</Text>
+                          <Text className="sidebar-mini-meta">
                             {tagStat.txCount} 次交易
                           </Text>
                         </Stack>
                         <Stack gap={2} align="flex-end">
-                          <Text fw={800} c="brand.6">
+                          <Text size="sm" fw={800} c="brand.6">
                             ${tagStat.totalProfit.toFixed(2)}
                           </Text>
-                          <Text size="xs" c="dimmed">
+                          <Text className="sidebar-mini-meta">
                             均值 ${tagStat.txCount > 0 ? (tagStat.totalProfit / tagStat.txCount).toFixed(2) : '0.00'}
                           </Text>
                         </Stack>
