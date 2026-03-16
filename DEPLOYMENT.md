@@ -2,34 +2,55 @@
 
 ## 一键部署（推荐）
 
-项目根目录新增脚本：`scripts/deploy.sh`
+项目根目录脚本：`scripts/deploy.sh`
+
+这个脚本现在默认采用下面这套结构：
+
+- 前端网关 `mev-web`：使用 Cloudflare Origin Certificate，监听 `8443`
+- 后端 API `mev-api`：仅监听 `127.0.0.1:3000`
+- 前端构建为同源模式，浏览器请求 `/api/*` 和 `/socket.io/*` 时由 `scripts/gateway.mjs` 反代到后端
+
+### 最常用命令
 
 ```bash
-# 首次部署（安装依赖 + 构建 + 发布前端 + 启动后端 + 健康检查）
-# 默认 8443 端口，默认启用 TLS
+# 首次部署：安装依赖 + 构建 + 启动前后端 + 健康检查
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+JWT_SECRET='replace-with-a-strong-secret' \
 ./scripts/deploy.sh
 
 # 跳过依赖安装
-SKIP_INSTALL=1 ./scripts/deploy.sh
-
-# 自定义前端静态目录
-FRONTEND_DIST_DIR=/var/www/your_site ./scripts/deploy.sh
-
-# Cloudflare Origin Certificate 常见健康检查（证书非公网 CA，默认用 -k）
-HEALTH_HOST=127.0.0.1 \
+SKIP_INSTALL=1 \
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+JWT_SECRET='replace-with-a-strong-secret' \
+./scripts/deploy.sh
+
+# 自定义前端静态目录
+FRONTEND_DIST_DIR=/var/www/mev_dashboard \
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+JWT_SECRET='replace-with-a-strong-secret' \
 ./scripts/deploy.sh
 ```
 
-脚本行为：
+### 默认端口
+
+- Web: `8443`
+- API: `127.0.0.1:3000`
+
+### 脚本行为
+
 1. 安装前后端依赖（默认）
-2. 构建前端与后端
-3. 将前端 `dist` 发布到 `FRONTEND_DIST_DIR`（默认 `/var/www/mev_dashboard`）
-4. 使用 PM2 重载/启动后端（若本机安装了 PM2）
-5. 自动执行健康检查
+2. 以前后端同源模式构建前端：`VITE_API_SAME_ORIGIN=1`
+3. 构建后端
+4. 将前端 `dist` 发布到 `FRONTEND_DIST_DIR`
+5. 启动或重载两个进程：
+   - `mev-api`
+   - `mev-web`
+6. 自动检查：
+   - `http://127.0.0.1:3000/api/health`
+   - `https://127.0.0.1:8443/api/health`
 
 ## Cloudflare SSL 证书
 
@@ -48,49 +69,35 @@ SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
 ```bash
 SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
 SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-SERVER_PORT=8443 \
+JWT_SECRET='replace-with-a-strong-secret' \
 ./scripts/deploy.sh
 ```
 
-## 不使用 Nginx（Node 直出 Web 端口 + API:3000）
+## 当前推荐部署拓扑
 
-如果你不想用 Nginx 反向代理，又希望：
-- Web 端口（例如 `8443`）走 HTTPS（Cloudflare Origin Cert）
-- API 仍然在 `3000`（内部监听）
+不使用 Nginx 时，推荐直接用项目自带的 Node 网关：
 
-可以使用项目自带的 Node 网关 `scripts/gateway.mjs`：
+- `scripts/gateway.mjs` 负责 HTTPS + 静态文件 + `/api/*` 和 `/socket.io/*` 反代
+- `server/dist/index.js` 只跑 API 服务
 
-1) 启动后端 API（3000）
-```bash
-cd server
-npm run build
-PORT=3000 HOST=127.0.0.1 NODE_ENV=production node dist/index.js
-```
+对应关系：
 
-2) 构建前端，并用网关监听 8443（托管 `dist` + 反代 `/api/*` 和 `/socket.io/*` 到 3000）
-```bash
-cd ..
-VITE_API_SAME_ORIGIN=1 npm run build
+- 外部访问：`https://your-domain.com:8443`
+- 内部 API：`http://127.0.0.1:3000`
 
-SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
-SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
-WEB_PORT=8443 \
-API_TARGET=http://127.0.0.1:3000 \
-node scripts/gateway.mjs
-```
-
-说明：
-- 前端构建时设置 `VITE_API_SAME_ORIGIN=1`，让前端请求走同源 `/api`（由网关转发到 3000）。
-- 访问地址将是 `https://your-domain.com:8443`（Cloudflare 需允许并代理该端口）。
-- 防火墙可用 `scripts/firewall-ufw.sh` 将 `3000` 限制为本机 + 固定 IP allowlist。
+`scripts/deploy.sh` 已经会自动按这套方式启动，不需要再手动分别执行两个命令。
 
 ### 3. Cloudflare 模式
 在 Cloudflare 中将 SSL 模式设置为 `Full (strict)`。
 
 ### 4. 后端环境变量
-- `ENABLE_HTTPS=1`（脚本会自动设置）
-- `SSL_CERT_PATH`
-- `SSL_KEY_PATH`
+
+推荐至少配置：
+
+- `JWT_SECRET`
+- `DATABASE_PATH`
+- `LOG_LEVEL`
+- `ALLOWED_ORIGINS`（如果你后续要单独开放 API 域名）
 
 ## API 地址配置
 
@@ -150,16 +157,17 @@ VITE_API_BASE_URL=https://your-domain.com/api
 
 ## 部署场景
 
-### 场景1：前后端同服务器不同端口
+### 场景1：前后端同服务器，浏览器只访问 8443
 
-- 前端：`http://your-server:80` 或 `https://your-server:8443`
-- 后端：`http://your-server:3000`
+- 前端：`https://your-server:8443`
+- 后端：`http://127.0.0.1:3000`
 
 配置：
 ```bash
-VITE_API_BASE_URL=http://your-server:3000
-# 或使用 HTTPS
-VITE_API_BASE_URL=https://your-server:3000
+SSL_CERT_PATH=/etc/ssl/certs/cf-origin.pem \
+SSL_KEY_PATH=/etc/ssl/private/cf-origin.key \
+JWT_SECRET='replace-with-a-strong-secret' \
+./scripts/deploy.sh
 ```
 
 ### 场景2：使用 Nginx 反向代理（推荐）
