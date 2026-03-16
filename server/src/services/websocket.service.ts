@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from '../utils/logger';
-import { getAllowedOrigins, isOriginAllowed } from '../utils/security';
+import { getAllowedOrigins, isOriginAllowedForRequest } from '../utils/security';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -16,17 +16,24 @@ export class WebSocketService {
     // 优化的Socket.IO服务器配置 - 提高部署环境稳定性
     this.io = new SocketIOServer(this.fastify.server, {
       cors: {
-        origin: (origin, callback) => {
-          if (isOriginAllowed(origin)) {
-            callback(null, true);
-            return;
-          }
-
-          logger.warn(`Socket.IO CORS拒绝来源: ${origin}，允许来源: ${getAllowedOrigins().join(', ')}`);
-          callback(new Error('Not allowed by Socket.IO CORS'));
-        },
+        origin: true,
         methods: ['GET', 'POST'],
         credentials: true
+      },
+      allowRequest: (req, callback) => {
+        const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+        const hostHeader = req.headers['x-forwarded-host'] || req.headers.host;
+        const protoHeader = req.headers['x-forwarded-proto'] || 'http';
+
+        if (isOriginAllowedForRequest(origin, hostHeader, protoHeader)) {
+          callback(null, true);
+          return;
+        }
+
+        logger.warn(
+          `Socket.IO拒绝来源: ${origin}，主机: ${String(hostHeader || '')}，协议: ${String(protoHeader || '')}，允许来源: ${getAllowedOrigins().join(', ')}`
+        );
+        callback('Not allowed by Socket.IO CORS', false);
       },
       path: '/socket.io',
       transports: ['polling', 'websocket'], // 支持WebSocket和polling

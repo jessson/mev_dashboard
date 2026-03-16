@@ -114,7 +114,8 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onLogin }) => {
     };
 
     const socketInstance = io(getWebSocketUrl(), {
-      transports: ['polling'],
+      path: '/socket.io',
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

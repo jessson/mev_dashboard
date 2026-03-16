@@ -191,7 +191,15 @@ function handleUpgrade(req, clientSocket, head) {
   const upstreamSocket = net.connect(
     { host: apiTargetUrl.hostname, port: Number.parseInt(apiTargetUrl.port || '80', 10) },
     () => {
-      const headers = Object.entries(req.headers)
+      const upstreamHeaders = {
+        ...req.headers,
+        host: apiTargetUrl.host,
+        'x-forwarded-host': req.headers.host || '',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-for': req.socket.remoteAddress || '',
+      };
+
+      const headers = Object.entries(upstreamHeaders)
         .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
         .join('\r\n');
 
