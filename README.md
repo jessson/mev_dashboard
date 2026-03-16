@@ -27,7 +27,8 @@ mev_dashboard/
 │   ├── src/services/         # 业务服务与 Socket.IO
 │   ├── src/utils/            # 后端工具与安全逻辑
 │   └── scripts/              # 用户、日志、数据相关脚本
-├── scripts/deploy.sh         # 一键部署脚本
+├── scripts/deploy.sh         # 一键部署准备脚本（安装/构建/写入 .env）
+├── scripts/start.sh          # 生产启动脚本（PM2 拉起 mev-api / mev-web）
 ├── scripts/gateway.mjs       # HTTPS 网关，托管前端并反代 /api 与 /socket.io
 ├── scripts/firewall-ufw.sh   # UFW 规则脚本
 └── DEPLOYMENT.md             # 生产部署说明
@@ -85,14 +86,15 @@ npm run dev
 
 当前工程只有一套正式维护的生产方案：
 
-- `scripts/deploy.sh` 启动 `mev-api` 和 `mev-web`
+- `scripts/deploy.sh` 负责安装系统依赖、Node 依赖、构建产物、发布前端并写入 `.env`
+- `scripts/start.sh` 负责启动 `mev-api` 和 `mev-web`
 - `mev-web` 使用 Cloudflare Origin Certificate 监听 `8443`
 - `mev-web` 托管前端静态文件，并反代：
   - `/api/*`
   - `/socket.io/*`
 - `mev-api` 监听 `0.0.0.0:3000`
 - `ufw` 控制 `3000` 的外部白名单访问
-- 在 Debian/Ubuntu 系统上，部署脚本会自动安装系统依赖，包括 `sqlite3`、`libsqlite3-dev`、编译工具链和 `ufw`
+- 在 Debian/Ubuntu 系统上，部署脚本会自动安装系统依赖，包括 `sqlite3`、`libsqlite3-dev`、编译工具链、`ufw`，以及缺失时的 `Node.js 20 + npm`
 
 详细步骤见 [DEPLOYMENT.md](/Users/luffy/project/mev_dashboard/DEPLOYMENT.md)。
 
@@ -113,6 +115,13 @@ cd server
 npm run dev
 npm run build
 npm start
+```
+
+### 生产部署
+
+```bash
+./scripts/deploy.sh
+./scripts/start.sh
 ```
 
 ### 用户管理
@@ -187,14 +196,20 @@ VITE_API_SAME_ORIGIN=1
 
 ### HTTPS 网关相关
 
+- `FRONTEND_DIST_DIR`
 - `WEB_HOST`
 - `WEB_PORT`
 - `SSL_CERT_PATH`
 - `SSL_KEY_PATH`
 
+生产部署时会自动写入：
+
+- 根目录 `.env`
+- 后端 `server/.env`
+
 ## 验证
 
-部署或启动后，常用检查地址：
+执行 `./scripts/deploy.sh` 后，服务不会自动启动；继续执行 `./scripts/start.sh` 后，可检查：
 
 - 前端入口：`https://your-domain:8443`
 - API 健康检查：`http://your-server:3000/api/health`

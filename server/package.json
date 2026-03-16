@@ -39,6 +39,7 @@
     "@fastify/websocket": "^8.3.1",
     "bcryptjs": "^2.4.3",
     "dayjs": "^1.11.10",
+    "dotenv": "^16.6.1",
     "fastify": "^4.24.3",
     "node-cron": "^3.0.3",
     "pino": "^8.16.2",
