@@ -8,7 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import compress from '@fastify/compress';
 
-export async function registerPlugins(fastify: FastifyInstance) {
+export async function registerPlugins(fastify: FastifyInstance<any>) {
   // 安全相关 - 先注册helmet但配置更宽松
   await fastify.register(helmet, {
     contentSecurityPolicy: false,

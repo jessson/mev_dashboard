@@ -9,7 +9,7 @@ import { tokenRoutes } from '../routes/token.routes';
 import nodeRoutes from '../routes/node.routes';
 import { logger } from '../utils/logger';
 
-export async function registerRoutes(fastify: FastifyInstance) {
+export async function registerRoutes(fastify: FastifyInstance<any>) {
   // 健康检查
   fastify.get('/api/health', async () => {
     logger.info(`健康检查请求`);

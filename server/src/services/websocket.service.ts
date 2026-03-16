@@ -4,10 +4,10 @@ import { logger } from '../utils/logger';
 
 export class WebSocketService {
   private io: SocketIOServer;
-  private fastify: FastifyInstance;
+  private fastify: FastifyInstance<any>;
   private clients: Map<string, any> = new Map();
 
-  constructor(fastify: FastifyInstance) {
+  constructor(fastify: FastifyInstance<any>) {
     this.fastify = fastify;
   }
 
