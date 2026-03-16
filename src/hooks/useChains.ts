@@ -1,115 +1,101 @@
-import { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
+import { ChainConfig } from '../types';
 
-export interface ChainConfig {
-  id: string;
-  name: string;
-  displayName: string;
-  symbol: string;
-  color: string;
-  explorerUrl: {
-    tx: string;
-    address: string;
-  };
-  enabled: boolean;
-  order: number;
-}
+const chainKeys = {
+  all: ['chains', 'all'] as const,
+  enabled: ['chains', 'enabled'] as const,
+};
 
 export const useChains = () => {
-  const [chains, setChains] = useState<ChainConfig[]>([]);
-  const [enabledChains, setEnabledChains] = useState<ChainConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchChains = async () => {
-    try {
-      setLoading(true);
-      const [allChains, enabled] = await Promise.all([
-        apiService.getChains(),
-        apiService.getEnabledChains()
-      ]);
-      setChains(allChains);
-      setEnabledChains(enabled);
-      setError(null);
-    } catch (err) {
-      setError('获取链配置失败');
-      console.error('Failed to fetch chains:', err);
-    } finally {
-      setLoading(false);
-    }
+  const chainsQuery = useQuery({
+    queryKey: chainKeys.all,
+    queryFn: () => apiService.getChains() as Promise<ChainConfig[]>,
+  });
+
+  const enabledChainsQuery = useQuery({
+    queryKey: chainKeys.enabled,
+    queryFn: () => apiService.getEnabledChains() as Promise<ChainConfig[]>,
+  });
+
+  const invalidateChains = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: chainKeys.all }),
+      queryClient.invalidateQueries({ queryKey: chainKeys.enabled }),
+    ]);
   };
 
-  useEffect(() => {
-    fetchChains();
-  }, []);
+  const updateMutation = useMutation({
+    mutationFn: ({ chainId, config }: { chainId: string; config: Partial<ChainConfig> }) =>
+      apiService.updateChainConfig(chainId, config),
+    onSuccess: invalidateChains,
+  });
 
-  const getChainById = (id: string): ChainConfig | undefined => {
-    return chains.find(chain => chain.id === id);
-  };
+  const addMutation = useMutation({
+    mutationFn: (config: ChainConfig) => apiService.addChain(config),
+    onSuccess: invalidateChains,
+  });
 
-  const getChainColor = (id: string): string => {
-    const chain = getChainById(id);
-    return chain ? chain.color : '#6b7280';
-  };
+  const deleteMutation = useMutation({
+    mutationFn: (chainId: string) => apiService.deleteChain(chainId),
+    onSuccess: invalidateChains,
+  });
 
-  const getChainDisplayName = (id: string): string => {
-    const chain = getChainById(id);
-    return chain ? chain.displayName : id;
-  };
+  const chains = chainsQuery.data || [];
+  const enabledChains = enabledChainsQuery.data || [];
 
-  const getExplorerUrl = (chainId: string, hash: string, type: 'tx' | 'address' = 'tx'): string => {
+  const getChainById = (id: string) => chains.find((chain) => chain.id === id);
+
+  const getChainColor = (id: string) => getChainById(id)?.color || '#6b7280';
+
+  const getChainDisplayName = (id: string) => getChainById(id)?.displayName || id;
+
+  const getExplorerUrl = (chainId: string, hash: string, type: 'tx' | 'address' = 'tx') => {
     const chain = getChainById(chainId);
-    if (!chain) {
-      return '#';
-    }
+    if (!chain) return '#';
     return chain.explorerUrl[type] + hash;
-  };
-
-  const updateChainConfig = async (chainId: string, config: Partial<ChainConfig>) => {
-    try {
-      await apiService.updateChainConfig(chainId, config);
-      await fetchChains(); // 重新获取数据
-      return true;
-    } catch (err) {
-      console.error('Failed to update chain config:', err);
-      return false;
-    }
-  };
-
-  const addChain = async (config: ChainConfig) => {
-    try {
-      await apiService.addChain(config);
-      await fetchChains(); // 重新获取数据
-      return true;
-    } catch (err) {
-      console.error('Failed to add chain:', err);
-      return false;
-    }
-  };
-
-  const deleteChain = async (chainId: string) => {
-    try {
-      await apiService.deleteChain(chainId);
-      await fetchChains(); // 重新获取数据
-      return true;
-    } catch (err) {
-      console.error('Failed to delete chain:', err);
-      return false;
-    }
   };
 
   return {
     chains,
     enabledChains,
-    loading,
-    error,
+    loading: chainsQuery.isLoading || enabledChainsQuery.isLoading,
+    error:
+      chainsQuery.error instanceof Error
+        ? chainsQuery.error.message
+        : enabledChainsQuery.error instanceof Error
+          ? enabledChainsQuery.error.message
+          : null,
     getChainById,
     getChainColor,
     getChainDisplayName,
     getExplorerUrl,
-    updateChainConfig,
-    addChain,
-    deleteChain,
-    refetch: fetchChains
+    updateChainConfig: async (chainId: string, config: Partial<ChainConfig>) => {
+      try {
+        await updateMutation.mutateAsync({ chainId, config });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    addChain: async (config: ChainConfig) => {
+      try {
+        await addMutation.mutateAsync(config);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    deleteChain: async (chainId: string) => {
+      try {
+        await deleteMutation.mutateAsync(chainId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    refetch: invalidateChains,
   };
 };

@@ -1,5 +1,5 @@
 // 动态获取API基础URL
-const getApiBaseUrl = (): string => {
+export const getApiBaseUrl = (): string => {
   // 优先使用环境变量
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
@@ -21,7 +21,7 @@ const getApiBaseUrl = (): string => {
   return `${protocol}//${hostname}:3000`;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
 
 // 导入mock数据
 import { 
@@ -129,7 +129,7 @@ class ApiService {
   // 测试连接
   async testConnection() {
     try {
-      const response = await this.request<any>('/api/health');
+      await this.request('/api/health');
       return true;
     } catch (error) {
       console.error('❌ API连接失败:', error);
@@ -505,6 +505,10 @@ class ApiService {
   async getNodeStatus() {
     const response = await this.request<any>('/api/node/status');
     return response.data; // 解析嵌套的data字段
+  }
+
+  async getTradeDetail(id: number) {
+    return this.request<any>(`/api/trade/${id}`);
   }
 }
 

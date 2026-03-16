@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Card, SimpleGrid, Stack, Text } from '@mantine/core';
 import { ProfitEvent } from '../../types';
 
 interface ProfitStatisticsProps {

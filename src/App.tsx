@@ -1,93 +1,104 @@
-import { useEffect, useState } from 'react';
 import { Center, Loader, Stack, Text } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import WelcomePage from './components/WelcomePage';
-import LoginPage from './components/LoginPage';
-import Dashboard from './components/Dashboard';
-import { apiService } from './services/api';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { DashboardProvider } from './context/DashboardContext';
+import DashboardLayout from './layouts/DashboardLayout';
+import ChainsPage from './pages/ChainsPage';
+import LoginRoute from './pages/LoginRoute';
+import NodesPage from './pages/NodesPage';
+import OverviewPage from './pages/OverviewPage';
+import TradesPage from './pages/TradesPage';
+import WarningsPage from './pages/WarningsPage';
+import WelcomeRoute from './pages/WelcomeRoute';
 
-function App() {
-  const [currentView, setCurrentView] = useState<'welcome' | 'login' | 'dashboard'>('welcome');
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const FullPageLoader = () => {
+  return (
+    <Center h="100vh" bg="linear-gradient(145deg, #eaf2ff 0%, #f5f7ff 40%, #f3f8ff 100%)">
+      <Stack align="center" gap="xs">
+        <Loader color="blue" type="dots" />
+        <Text c="dimmed">正在初始化应用...</Text>
+      </Stack>
+    </Center>
+  );
+};
 
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        if (typeof window !== 'undefined') {
-          const hasPhantomConflict =
-            window.location.href.includes('evmPhantom') ||
-            document.querySelector('script[src*="evmPhantom"]') ||
-            window.console?.error?.toString().includes('evmPhantom');
+const AuthGate = () => {
+  const { initialized, isAuthenticated } = useAuth();
 
-          if (hasPhantomConflict) {
-            try {
-              delete (window as any).ethereum;
-              delete (window as any).phantom;
-            } catch {
-              // ignore
-            }
-          }
-        }
+  if (!initialized) {
+    return <FullPageLoader />;
+  }
 
-        const token = localStorage.getItem('token');
-        const savedUser = localStorage.getItem('user');
+  return <Navigate to={isAuthenticated ? '/app/overview' : '/welcome'} replace />;
+};
 
-        if (token && savedUser) {
-          try {
-            const userData = JSON.parse(savedUser);
-            setUser(userData);
-            setCurrentView('dashboard');
-          } catch {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+const PublicRoute = () => {
+  const { initialized, isAuthenticated } = useAuth();
 
-    initializeApp();
-  }, []);
+  if (!initialized) {
+    return <FullPageLoader />;
+  }
 
-  const handleShowLogin = () => {
-    setCurrentView('login');
-  };
+  if (isAuthenticated) {
+    return <Navigate to="/app/overview" replace />;
+  }
 
-  const handleLogin = (userData: any) => {
-    setUser(userData);
-    setCurrentView('dashboard');
-  };
+  return <Outlet />;
+};
 
-  const handleLogout = () => {
-    apiService.logout();
-    setUser(null);
-    setCurrentView('welcome');
-    notifications.show({
-      title: '退出成功',
-      message: '已退出登录',
-      color: 'green',
-    });
-  };
+const ProtectedRoute = () => {
+  const { initialized, isAuthenticated } = useAuth();
 
-  if (loading) {
-    return (
-      <Center h="100vh" bg="linear-gradient(145deg, #eaf2ff 0%, #f5f7ff 40%, #f3f8ff 100%)">
-        <Stack align="center" gap="xs">
-          <Loader color="blue" type="dots" />
-          <Text c="dimmed">正在初始化应用...</Text>
-        </Stack>
-      </Center>
-    );
+  if (!initialized) {
+    return <FullPageLoader />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
 
   return (
-    <div className="app-container">
-      {currentView === 'welcome' && <WelcomePage onLogin={handleShowLogin} />}
-      {currentView === 'login' && <LoginPage onLogin={handleLogin} />}
-      {currentView === 'dashboard' && user && <Dashboard user={user} onLogout={handleLogout} />}
-    </div>
+    <DashboardProvider>
+      <DashboardLayout />
+    </DashboardProvider>
+  );
+};
+
+const AdminRoute = () => {
+  const { user } = useAuth();
+
+  if (user?.type !== 'admin') {
+    return <Navigate to="/app/overview" replace />;
+  }
+
+  return <Outlet />;
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<AuthGate />} />
+
+        <Route element={<PublicRoute />}>
+          <Route path="/welcome" element={<WelcomeRoute />} />
+          <Route path="/login" element={<LoginRoute />} />
+        </Route>
+
+        <Route path="/app" element={<ProtectedRoute />}>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="trades" element={<TradesPage />} />
+          <Route path="nodes" element={<NodesPage />} />
+          <Route element={<AdminRoute />}>
+            <Route path="warnings" element={<WarningsPage />} />
+            <Route path="chains" element={<ChainsPage />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
 
