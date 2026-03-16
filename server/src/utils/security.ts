@@ -19,6 +19,32 @@ export function getAllowedOrigins(): string[] {
   return Array.from(new Set([...LOCAL_ALLOWED_ORIGINS, ...configuredOrigins]));
 }
 
+function normalizeOrigin(origin: string): string | null {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    const protocol = url.protocol.toLowerCase();
+    const port = url.port;
+    const isDefaultPort =
+      (protocol === 'http:' && (port === '' || port === '80')) ||
+      (protocol === 'https:' && (port === '' || port === '443'));
+
+    return `${protocol}//${hostname}${isDefaultPort ? '' : `:${port}`}`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeForwardedHeader(value?: string | string[] | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const raw = Array.isArray(value) ? value[0] : value;
+  const first = raw.split(',')[0]?.trim();
+  return first || null;
+}
+
 export function isOriginAllowed(origin?: string | null): boolean {
   if (!origin) {
     return true;
@@ -28,7 +54,55 @@ export function isOriginAllowed(origin?: string | null): boolean {
     return true;
   }
 
-  return getAllowedOrigins().includes(origin);
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) {
+    return false;
+  }
+
+  return getAllowedOrigins()
+    .map((item) => normalizeOrigin(item))
+    .filter((item): item is string => Boolean(item))
+    .includes(normalizedOrigin);
+}
+
+export function isSameOriginViaGateway(
+  origin?: string | null,
+  forwardedHost?: string | string[] | null,
+  forwardedProto?: string | string[] | null
+): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  const normalizedOrigin = normalizeOrigin(origin);
+  const host = normalizeForwardedHeader(forwardedHost);
+  const proto = normalizeForwardedHeader(forwardedProto)?.toLowerCase();
+
+  if (!normalizedOrigin || !host || !proto) {
+    return false;
+  }
+
+  if (proto !== 'http' && proto !== 'https') {
+    return false;
+  }
+
+  return normalizedOrigin === normalizeOrigin(`${proto}://${host}`);
+}
+
+export function isOriginAllowedForRequest(
+  origin?: string | null,
+  forwardedHost?: string | string[] | null,
+  forwardedProto?: string | string[] | null
+): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    return true;
+  }
+
+  return isOriginAllowed(origin) || isSameOriginViaGateway(origin, forwardedHost, forwardedProto);
 }
 
 export function getJwtSecret(): string {

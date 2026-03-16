@@ -7,7 +7,12 @@ import swaggerUi from '@fastify/swagger-ui';
 import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import compress from '@fastify/compress';
-import { getAllowedOrigins, getJwtSecret, isOriginAllowed, isWriteRoleAllowed } from '../utils/security';
+import {
+  getAllowedOrigins,
+  getJwtSecret,
+  isOriginAllowedForRequest,
+  isWriteRoleAllowed,
+} from '../utils/security';
 
 export async function registerPlugins(fastify: FastifyInstance<any>) {
   // 安全相关 - 先注册helmet但配置更宽松
@@ -18,20 +23,29 @@ export async function registerPlugins(fastify: FastifyInstance<any>) {
 
   // CORS - 支持生产环境的配置
   await fastify.register(cors, {
-    origin: (origin, callback) => {
-      if (isOriginAllowed(origin)) {
-        callback(null, true);
+    delegator: (req, callback) => {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const forwardedProto = req.headers['x-forwarded-proto'];
+      const allowed = isOriginAllowedForRequest(origin, forwardedHost, forwardedProto);
+
+      if (!allowed) {
+        console.log(`❌ CORS拒绝来源: ${origin}`);
+        console.log(`✅ 允许的来源: ${getAllowedOrigins().join(', ')}`);
+        console.log(`🔁 转发主机: ${forwardedHost ?? ''}`);
+        console.log(`🔁 转发协议: ${forwardedProto ?? ''}`);
+        callback(new Error('Not allowed by CORS'));
         return;
       }
 
-      console.log(`❌ CORS拒绝来源: ${origin}`);
-      console.log(`✅ 允许的来源: ${getAllowedOrigins().join(', ')}`);
-      callback(new Error('Not allowed by CORS'), false);
+      callback(null, {
+        origin: true,
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+        optionsSuccessStatus: 200,
+      });
     },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    optionsSuccessStatus: 200 // 对于旧版浏览器
   });
 
   // 压缩
