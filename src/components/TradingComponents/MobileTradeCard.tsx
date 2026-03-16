@@ -11,12 +11,12 @@ interface MobileTradeCardProps {
 
 const MobileTradeCard: React.FC<MobileTradeCardProps> = React.memo(({ trade, isAdmin, onTradeClick }) => {
   return (
-    <Card withBorder radius="md" p="sm" mb="sm">
-      <Stack gap={6}>
+    <Card className="mobile-trade-card" p="md" mb="sm">
+      <Stack gap="sm">
         <Group justify="space-between">
           <Group gap={6}>
-            <Badge variant="light">{trade.tags?.[0] || '未知'}</Badge>
-            <Text fw={700}>{trade.txCount || 0}</Text>
+            <Badge color="brand">{trade.tags?.[0] || '未知'}</Badge>
+            <Text fw={800}>{trade.txCount || 0}</Text>
           </Group>
           <Text size="xs" c="dimmed">
             {dayjs(trade.created_at).format('MM-DD HH:mm')}
@@ -28,7 +28,7 @@ const MobileTradeCard: React.FC<MobileTradeCardProps> = React.memo(({ trade, isA
             <Text size="xs" c="dimmed">
               毛利
             </Text>
-            <Text size="sm" fw={700} c="teal">
+            <Text size="sm" fw={800} c="profit.6">
               ${trade.gross?.toFixed(4) || '0.0000'}
             </Text>
           </Stack>
@@ -36,7 +36,7 @@ const MobileTradeCard: React.FC<MobileTradeCardProps> = React.memo(({ trade, isA
             <Text size="xs" c="dimmed">
               净利
             </Text>
-            <Text size="sm" fw={700} c="blue">
+            <Text size="sm" fw={800} c="brand.6">
               ${trade.income?.toFixed(4) || '0.0000'}
             </Text>
           </Stack>
@@ -44,7 +44,7 @@ const MobileTradeCard: React.FC<MobileTradeCardProps> = React.memo(({ trade, isA
             <Text size="xs" c="dimmed">
               比例
             </Text>
-            <Text size="sm" fw={700} c="red">
+            <Text size="sm" fw={800} c="danger.5">
               {trade.ratio?.toFixed(2) || '0.00'}%
             </Text>
           </Stack>
@@ -54,15 +54,15 @@ const MobileTradeCard: React.FC<MobileTradeCardProps> = React.memo(({ trade, isA
           <Text size="xs" c="dimmed">
             构建者
           </Text>
-          <Badge color="grape" variant="light">
+          <Badge color="violet" variant="light">
             {trade.builder}
           </Badge>
         </Group>
 
         <Text
-          ff="monospace"
+          className="mono-link"
           size="xs"
-          c={isAdmin ? 'blue' : 'dimmed'}
+          c={isAdmin ? 'brand.6' : 'dimmed'}
           style={{ cursor: isAdmin ? 'pointer' : 'default' }}
           onClick={() => (isAdmin ? onTradeClick(trade) : undefined)}
         >

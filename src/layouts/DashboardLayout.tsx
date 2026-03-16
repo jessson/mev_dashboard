@@ -2,17 +2,16 @@ import { useState } from 'react';
 import {
   ActionIcon,
   AppShell,
-  Badge,
   Box,
   Burger,
   Button,
   Divider,
   Group,
   NavLink,
+  Paper,
   ScrollArea,
   Stack,
   Text,
-  Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -22,6 +21,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Radar,
   Server,
   Settings2,
   TableProperties,
@@ -57,13 +57,12 @@ const DashboardLayout = () => {
   } = useDashboard();
 
   const isAdmin = user?.type === 'admin';
-
   const navItems = [
-    { to: '/app/overview', label: '总览', icon: LayoutDashboard, visible: true },
-    { to: '/app/trades', label: '交易', icon: TableProperties, visible: true },
-    { to: '/app/nodes', label: '节点', icon: Server, visible: true },
-    { to: '/app/warnings', label: '预警', icon: Bell, visible: isAdmin },
-    { to: '/app/chains', label: '链配置', icon: Settings2, visible: isAdmin },
+    { to: '/app/overview', label: '总览', hint: 'Pulse', icon: LayoutDashboard, visible: true },
+    { to: '/app/trades', label: '交易流', hint: 'Flow', icon: TableProperties, visible: true },
+    { to: '/app/nodes', label: '节点', hint: 'Infra', icon: Server, visible: true },
+    { to: '/app/warnings', label: '预警', hint: 'Risk', icon: Bell, visible: isAdmin },
+    { to: '/app/chains', label: '链配置', hint: 'Setup', icon: Settings2, visible: isAdmin },
   ];
 
   const handleLogout = () => {
@@ -74,87 +73,110 @@ const DashboardLayout = () => {
   return (
     <>
       <AppShell
-        header={{ height: 72 }}
-        navbar={{ width: 280, breakpoint: 'md', collapsed: { mobile: !opened, desktop: desktopCollapsed } }}
-        padding="md"
+        className="dashboard-shell"
+        header={{ height: 86 }}
+        navbar={{ width: 318, breakpoint: 'md', collapsed: { mobile: !opened, desktop: desktopCollapsed } }}
+        padding={{ base: 'md', lg: 'xl' }}
       >
-        <AppShell.Header>
-          <Group justify="space-between" h="100%" px="md" wrap="nowrap">
+        <AppShell.Header className="dashboard-header">
+          <Group justify="space-between" h="100%" px={{ base: 'md', lg: 'xl' }} wrap="nowrap">
             <Group gap="sm" wrap="nowrap">
               <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
               <ActionIcon
                 visibleFrom="md"
-                variant="subtle"
+                variant="white"
                 size="lg"
                 onClick={() => setDesktopCollapsed((value) => !value)}
                 aria-label={desktopCollapsed ? '展开侧边栏' : '折叠侧边栏'}
               >
                 {desktopCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               </ActionIcon>
-              <Box>
-                <Title order={4}>MEV Dashboard</Title>
-                <Text size="xs" c="dimmed">
-                  实时监控、收益分析与节点运维
-                </Text>
-              </Box>
+
+              <div className="brand-lockup">
+                <div className="brand-mark">
+                  <Radar size={20} />
+                </div>
+                <Box>
+                  <Text className="brand-title">MEV Terminal</Text>
+                  <Text className="brand-subtitle">实时监控与收益追踪</Text>
+                </Box>
+              </div>
             </Group>
 
-            <Group gap="xs" wrap="nowrap">
-              <Badge
-                color={wsConnected ? 'green' : 'red'}
-                leftSection={wsConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                variant="light"
-              >
-                {wsConnected ? '实时连接' : '连接中断'}
-              </Badge>
+            <div className="topbar-controls">
+              <div className={`status-pill ${wsConnected ? 'is-live' : ''}`}>
+                {wsConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
+                <span>{wsConnected ? '实时连接' : '连接中断'}</span>
+              </div>
+
+              <button className="status-pill is-node" type="button" onClick={() => setNodeModalOpened(true)}>
+                <Server size={14} />
+                <span>
+                  节点 {nodeStatus?.summary.online || 0}/{nodeStatus?.summary.total || 0}
+                </span>
+              </button>
+
               {wsError && (
-                <Button variant="subtle" size="xs" leftSection={<Cable size={14} />} onClick={reconnectSocket}>
-                  重连
+                <Button variant="light" size="xs" leftSection={<Cable size={14} />} onClick={reconnectSocket}>
+                  重连流
                 </Button>
               )}
-              <Button
-                variant="light"
-                size="xs"
-                leftSection={<Server size={14} />}
-                onClick={() => setNodeModalOpened(true)}
-              >
-                节点 {nodeStatus?.summary.online || 0}/{nodeStatus?.summary.total || 0}
-              </Button>
-              <Text visibleFrom="sm" size="sm" fw={500}>
+
+              <Text visibleFrom="sm" className="username-pill">
                 {user?.username}
               </Text>
-              <Button color="red" variant="light" size="xs" leftSection={<LogOut size={14} />} onClick={handleLogout}>
+
+              <Button color="danger" variant="light" size="xs" leftSection={<LogOut size={14} />} onClick={handleLogout}>
                 退出
               </Button>
-            </Group>
+            </div>
           </Group>
         </AppShell.Header>
 
-        <AppShell.Navbar p="sm">
-          <ScrollArea h="100%">
-            <Stack gap="md">
-              <Stack gap={4}>
-                {navItems
-                  .filter((item) => item.visible)
-                  .map((item) => {
-                    const Icon = item.icon;
-                    const active = location.pathname === item.to;
+        <AppShell.Navbar className="dashboard-navbar" p="md">
+          <ScrollArea h="100%" className="shell-scroll">
+            <Stack gap="lg">
+              <Paper className="sidebar-panel nav-cluster" p="sm">
+                <Text className="nav-section-label">Workspace</Text>
+                <Stack gap={6}>
+                  {navItems
+                    .filter((item) => item.visible)
+                    .map((item) => {
+                      const Icon = item.icon;
+                      const active = location.pathname === item.to;
 
-                    return (
-                      <NavLink
-                        key={item.to}
-                        component={Link}
-                        to={item.to}
-                        label={item.label}
-                        active={active}
-                        leftSection={<Icon size={16} />}
-                        onClick={close}
-                      />
-                    );
-                  })}
-              </Stack>
-
-              <Divider />
+                      return (
+                        <NavLink
+                          key={item.to}
+                          className="chain-link"
+                          component={Link}
+                          to={item.to}
+                          active={active}
+                          onClick={close}
+                          leftSection={<Icon size={17} />}
+                          label={
+                            <Group justify="space-between" wrap="nowrap" w="100%">
+                              <Text fw={700}>{item.label}</Text>
+                              <Text size="xs" c="dimmed">
+                                {item.hint}
+                              </Text>
+                            </Group>
+                          }
+                          styles={{
+                            root: {
+                              borderRadius: 18,
+                              border: active ? '1px solid rgba(22, 119, 255, 0.16)' : '1px solid transparent',
+                              background: active ? 'linear-gradient(145deg, rgba(22,119,255,0.12), rgba(255,255,255,0.8))' : 'transparent',
+                            },
+                            body: { gap: 2 },
+                            section: { color: active ? 'var(--brand-600)' : 'var(--text-secondary)' },
+                            label: { width: '100%' },
+                          }}
+                        />
+                      );
+                    })}
+                </Stack>
+              </Paper>
 
               <SidebarContent
                 enabledChains={enabledChains}
@@ -183,7 +205,7 @@ const DashboardLayout = () => {
           </ScrollArea>
         </AppShell.Navbar>
 
-        <AppShell.Main>
+        <AppShell.Main className="dashboard-main">
           <Outlet />
         </AppShell.Main>
       </AppShell>
