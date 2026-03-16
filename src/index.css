@@ -206,7 +206,7 @@ button.status-pill {
   margin-bottom: 8px;
   padding: 0 10px;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -221,13 +221,13 @@ button.status-pill {
 
 .sidebar-section-title {
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.86rem;
   letter-spacing: -0.04em;
 }
 
 .sidebar-section-note {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.64rem;
 }
 
 .chain-link {
@@ -244,13 +244,13 @@ button.status-pill {
 }
 
 .sidebar-mini-title {
-  font-size: 0.86rem;
+  font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .sidebar-mini-meta {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   color: var(--text-muted);
 }
 

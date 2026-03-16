@@ -156,8 +156,10 @@ const DashboardLayout = () => {
                           leftSection={<Icon size={17} />}
                           label={
                             <Group justify="space-between" wrap="nowrap" w="100%">
-                              <Text fw={700}>{item.label}</Text>
-                              <Text size="xs" c="dimmed">
+                              <Text fw={700} size="sm">
+                                {item.label}
+                              </Text>
+                              <Text size="10px" c="dimmed">
                                 {item.hint}
                               </Text>
                             </Group>
