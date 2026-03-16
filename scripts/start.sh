@@ -67,12 +67,12 @@ ensure_files_ready() {
   fi
 
   if [[ ! -f "$BACKEND_DIR/dist/index.js" ]]; then
-    echo "缺少后端构建产物: $BACKEND_DIR/dist/index.js，请先执行 ./scripts/deploy.sh" >&2
+    echo "缺少后端构建产物: $BACKEND_DIR/dist/index.js，请确认构建步骤成功执行。" >&2
     exit 1
   fi
 
   if [[ ! -d "$FRONTEND_DIST_DIR" ]]; then
-    echo "缺少前端发布目录: $FRONTEND_DIST_DIR，请先执行 ./scripts/deploy.sh" >&2
+    echo "缺少前端发布目录: $FRONTEND_DIST_DIR，请确认前端发布步骤成功执行。" >&2
     exit 1
   fi
 
