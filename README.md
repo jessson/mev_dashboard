@@ -92,6 +92,7 @@ npm run dev
   - `/socket.io/*`
 - `mev-api` 监听 `0.0.0.0:3000`
 - `ufw` 控制 `3000` 的外部白名单访问
+- 在 Debian/Ubuntu 系统上，部署脚本会自动安装系统依赖，包括 `sqlite3`、`libsqlite3-dev`、编译工具链和 `ufw`
 
 详细步骤见 [DEPLOYMENT.md](/Users/luffy/project/mev_dashboard/DEPLOYMENT.md)。
 

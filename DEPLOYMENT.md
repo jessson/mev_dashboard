@@ -28,15 +28,24 @@
 
 脚本会做这些事情：
 
-1. 检查并安装依赖
-2. 如果系统没有 `pm2`，自动安装 `pm2`
-3. 构建前端
-4. 构建后端
-5. 发布前端静态资源到 `FRONTEND_DIST_DIR`
-6. 启动或重载：
+1. 在 Debian/Ubuntu 系统上自动安装系统依赖：
+   - `curl`
+   - `ca-certificates`
+   - `build-essential`
+   - `python3`
+   - `make`
+   - `g++`
+   - `sqlite3`
+   - `libsqlite3-dev`
+   - `ufw`
+2. 安装前后端 Node 依赖
+3. 如果系统没有 `pm2`，自动安装 `pm2`
+4. 构建前端
+5. 构建后端
+6. 发布前端静态资源到 `FRONTEND_DIST_DIR`
+7. 启动或重载：
    - `mev-api`
    - `mev-web`
-7. 如果系统没有 `ufw`，尝试自动安装
 8. 配置防火墙：
    - 放行 `22/tcp`
    - 放行 `8443/tcp`
@@ -57,6 +66,11 @@
 - Cloudflare Origin Key `.key`
 - 强随机 `JWT_SECRET`
 - 允许访问 `3000` 的白名单 IP 或 CIDR
+
+说明：
+
+- 如果系统是 Debian/Ubuntu，脚本会自动安装 `sqlite3` 和构建依赖
+- 如果系统不是 apt 系发行版，脚本会跳过系统包安装，只继续执行 Node 依赖安装
 
 如果你不通过环境变量传入：
 

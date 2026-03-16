@@ -55,6 +55,29 @@ need_cmd() {
   fi
 }
 
+install_system_dependencies() {
+  local packages=(
+    curl
+    ca-certificates
+    build-essential
+    python3
+    make
+    g++
+    sqlite3
+    libsqlite3-dev
+    ufw
+  )
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    log "当前系统不是 apt 系，跳过系统依赖自动安装"
+    return 0
+  fi
+
+  log "安装系统依赖: ${packages[*]}"
+  sudo apt-get update
+  sudo apt-get install -y "${packages[@]}"
+}
+
 ensure_pm2() {
   if command -v pm2 >/dev/null 2>&1; then
     return 0
@@ -326,6 +349,7 @@ run_health_check() {
 }
 
 main() {
+  install_system_dependencies
   need_cmd node
   need_cmd npm
   need_cmd curl
