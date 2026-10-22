@@ -112,10 +112,12 @@ ensure_pm2() {
 
 install_deps() {
   local dir="$1"
+  # NODE_ENV=production loaded from server/.env makes npm omit devDependencies,
+  # but start.sh builds on this host and needs vite/typescript.
   if [[ -f "$dir/package-lock.json" ]]; then
-    npm ci --no-audit --no-fund --prefix "$dir"
+    npm ci --include=dev --no-audit --no-fund --prefix "$dir"
   else
-    npm install --no-audit --no-fund --prefix "$dir"
+    npm install --include=dev --no-audit --no-fund --prefix "$dir"
   fi
 }
 
